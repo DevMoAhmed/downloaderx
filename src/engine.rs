@@ -173,7 +173,10 @@ pub async fn download(
                 r = run_parallel(&ctx, &state_path, opts.connections, opts.retries) => r,
                 _ = cancel.cancelled() => Err(Cancelled.into()),
             };
-            save_state(&ctx, &state_path).await?;
+            if result.is_err() {
+                // Keep the latest progress so a resume continues from here.
+                save_state(&ctx, &state_path)?;
+            }
             result?;
             fs::remove_file(&state_path).await.ok();
         }
@@ -230,15 +233,18 @@ async fn load_or_new_state(path: &Path, url: &str, size: u64, validator: &Option
     State { url: url.into(), size, validator: validator.clone(), segments }
 }
 
-async fn save_state(ctx: &Ctx<'_>, path: &Path) -> Result<()> {
+/// Blocking on purpose: the file is tiny, and with no await points a `select!` can't drop
+/// this halfway. tokio::fs work keeps running on a blocking thread after its future is
+/// dropped, so an abandoned save used to race the next one on the same `.tmp` file.
+fn save_state(ctx: &Ctx<'_>, path: &Path) -> Result<()> {
     let json = {
         let st = ctx.state.lock().unwrap();
         *ctx.progress.segments.lock().unwrap() = st.segments.iter().map(|s| [s.start, s.end, s.pos]).collect();
         serde_json::to_vec(&*st)?
     };
     let tmp = with_suffix(path, ".tmp");
-    fs::write(&tmp, json).await?;
-    fs::rename(&tmp, path).await?;
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, path)?;
     Ok(())
 }
 
@@ -246,7 +252,7 @@ async fn run_parallel(ctx: &Ctx<'_>, state_path: &Path, n: usize, retries: u32) 
     let saver = async {
         loop {
             tokio::time::sleep(Duration::from_secs(1)).await;
-            save_state(ctx, state_path).await.ok();
+            save_state(ctx, state_path).ok();
         }
     };
     let mut workers = Vec::new();

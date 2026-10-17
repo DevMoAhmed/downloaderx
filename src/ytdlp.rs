@@ -84,7 +84,8 @@ pub async fn download(
 ) -> Result<PathBuf> {
     tokio::fs::create_dir_all(dir).await?;
     let mut cmd = Command::new("yt-dlp");
-    cmd.args(["--no-playlist", "--newline", "--no-warnings", "-f", format])
+    // `--print` implies `--quiet`, which hides the progress template unless `--progress` is given.
+    cmd.args(["--no-playlist", "--newline", "--no-warnings", "--progress", "-f", format])
         .args(["-N", &conns.to_string()])
         .args(["--progress-template", "download:DX %(progress.downloaded_bytes)s %(progress.total_bytes)s %(progress.total_bytes_estimate)s"])
         .args(["--print", "after_move:DXPATH %(filepath)s"])

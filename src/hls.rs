@@ -96,10 +96,15 @@ pub fn parse_master(text: &str, base: &Url) -> Vec<Variant> {
         let Ok(url) = base.join(uri) else { continue };
         let bandwidth = a.get("AVERAGE-BANDWIDTH").or(a.get("BANDWIDTH")).and_then(|b| b.parse().ok()).unwrap_or(0);
         let height = a.get("RESOLUTION").and_then(|r| r.split('x').nth(1)?.parse().ok());
-        let mbps = bandwidth as f64 / 1e6;
+        // Low-bitrate (often audio-only) variants would all show as "0.0 Mbps".
+        let rate = if bandwidth >= 1_000_000 {
+            format!("{:.1} Mbps", bandwidth as f64 / 1e6)
+        } else {
+            format!("{} kbps", bandwidth / 1000)
+        };
         let label = match height {
-            Some(h) => format!("{h}p · {mbps:.1} Mbps"),
-            None => format!("{mbps:.1} Mbps"),
+            Some(h) => format!("{h}p · {rate}"),
+            None => rate,
         };
         let audio = a.get("AUDIO").and_then(|g| audio_groups.get(g)).cloned();
         out.push(Variant { label, url: url.to_string(), bandwidth, height, audio });

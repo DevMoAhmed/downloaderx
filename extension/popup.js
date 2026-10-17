@@ -24,7 +24,8 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
       const b = document.createElement('button');
       b.textContent = c.label + (c.size ? ` · ${size(c.size)}` : '');
       b.onclick = async () => {
-        const n = c.kind.type === 'direct' ? null : name || r.data.title || tab.title;
+        // Prefer the site's own title (from yt-dlp) over the tab title with its " - YouTube" suffix.
+        const n = c.kind.type === 'direct' ? null : r.data.title || name || tab.title;
         const d = await send({ type: 'download', url: c.url, kind: c.kind, name: n, referer: tab.url });
         box.innerHTML = d.error ? `<span class="err">${esc(d.error)}</span>` : '<span class="on">✓ Added</span>';
       };

@@ -128,6 +128,7 @@
     for (const m of seen) if (m.type !== 'hls') direct.add(m.url);
 
     const choices = [];
+    const bare = label => label.replace(/^\d+p · /, '');
     const results = await Promise.allSettled([...streams, ...[...direct].slice(-6)].map(u => probe(u)));
     const masters = results.filter(r => r.status === 'fulfilled' && r.value.choices.some(c => c.label !== 'Stream'));
     for (const r of results) {
@@ -136,7 +137,11 @@
       if (masters.length && r.value.choices.every(c => c.label === 'Stream')) continue;
       for (const c of r.value.choices) {
         if (c.kind.type === 'direct' && v && c.url === v.currentSrc && v.videoHeight) c.label = `${v.videoHeight}p · ${c.label}`;
-        if (!choices.some(x => x.url === c.url && JSON.stringify(x.kind) === JSON.stringify(c.kind))) choices.push(c);
+        // The <video> src and the URL seen on the network can differ only by a redirect,
+        // so direct files also count as the same when name and size match.
+        const same = x => JSON.stringify(x.kind) === JSON.stringify(c.kind) &&
+          (x.url === c.url || (c.kind.type === 'direct' && c.size && x.size === c.size && bare(x.label) === bare(c.label)));
+        if (!choices.some(same)) choices.push(c);
       }
     }
     if (!choices.length) {
