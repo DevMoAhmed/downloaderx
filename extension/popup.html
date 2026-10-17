@@ -1,0 +1,34 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { --bg:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e6ec; --accent:#2f6fed; --soft:#e6eefe; --bad:#d64545; --ok:#1f9d55; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1c2028; --text:#e6e9ef; --muted:#8f97a8; --line:#2b313c; --accent:#5b8cff; --soft:#23304d; } }
+  body { margin:0; width:340px; font:13px/1.4 system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
+  header b { font-size:14px; } #st { margin-left:auto; font-size:12px; }
+  .on { color:var(--ok); } .off { color:var(--bad); }
+  .sec { padding:8px 12px; border-bottom:1px solid var(--line); }
+  .sec h4 { margin:0 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted); letter-spacing:.05em; }
+  .m { display:flex; gap:8px; align-items:center; padding:6px 0; }
+  .m .n { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .m small { color:var(--muted); }
+  button { font:inherit; border:1px solid var(--line); background:var(--bg); color:var(--text); padding:4px 10px; border-radius:6px; cursor:pointer; }
+  button:hover { border-color:var(--accent); } button.p { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .q { margin:2px 0 6px 0; display:flex; flex-wrap:wrap; gap:4px; }
+  .q button { font-size:12px; }
+  .msg { font-size:12px; color:var(--muted); } .err { color:var(--bad); font-size:12px; }
+  label { display:flex; gap:8px; align-items:center; }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+  <header><b>⬇ DownloaderX</b><span id="st">checking…</span></header>
+  <div class="sec"><button class="p" id="page">Download video from this page</button> <div id="pageQ" class="q"></div></div>
+  <div class="sec"><h4>Media found on this tab</h4><div id="list" class="msg">Play the video to detect it.</div></div>
+  <div class="sec"><label><input type="checkbox" id="intercept"> Take over browser downloads</label></div>
+  <div class="sec"><a href="http://127.0.0.1:6801" target="_blank">Open dashboard</a></div>
+  <script src="popup.js"></script>
+</body>
+</html>

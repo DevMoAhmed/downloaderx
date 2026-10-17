@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DownloaderX</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #6b7385; --line: #e3e6ec;
+  --accent: #2f6fed; --accent-soft: #e6eefe; --ok: #1f9d55; --warn: #d98a00; --bad: #d64545;
+  --bar: #e9ecf2;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171d; --panel: #1c2028; --text: #e6e9ef; --muted: #8f97a8; --line: #2b313c;
+    --accent: #5b8cff; --accent-soft: #23304d; --bar: #2a303b; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
+header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; }
+header .stat { margin-left: auto; color: var(--muted); font-size: 13px; }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+main { display: grid; grid-template-columns: 180px 1fr; min-height: calc(100vh - 53px); }
+nav { background: var(--panel); border-right: 1px solid var(--line); padding: 8px; }
+nav a { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 6px; color: var(--text); text-decoration: none; cursor: pointer; }
+nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+nav a span { color: var(--muted); font-size: 12px; }
+nav h4 { margin: 12px 10px 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
+section { padding: 12px 16px; overflow: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+tr.sel td { background: var(--accent-soft); }
+tbody tr { cursor: pointer; }
+td.name { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+.bar { position: relative; height: 8px; width: 160px; background: var(--bar); border-radius: 4px; overflow: hidden; }
+.bar i { position: absolute; top: 0; bottom: 0; background: var(--accent); }
+.pill { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--bar); }
+.pill.running { background: var(--accent-soft); color: var(--accent); }
+.pill.done { color: var(--ok); } .pill.failed { color: var(--bad); } .pill.paused { color: var(--warn); }
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+#detail { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: none; }
+#detail .segs { position: relative; height: 18px; background: var(--bar); border-radius: 4px; overflow: hidden; margin: 8px 0; }
+#detail .segs i { position: absolute; top: 0; bottom: 0; background: var(--accent); border-right: 1px solid var(--panel); }
+#detail .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 13px; }
+#detail .kv b { color: var(--muted); font-weight: 500; }
+#detail code { word-break: break-all; }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(560px, calc(100vw - 32px)); padding: 18px; }
+dialog::backdrop { background: rgba(0,0,0,.4); }
+dialog h3 { margin: 0 0 12px; }
+label { display: block; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+input, select { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
+.row { display: flex; gap: 8px; } .row > * { flex: 1; }
+.choices label { display: flex; gap: 8px; align-items: center; color: var(--text); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; margin: 4px 0; cursor: pointer; }
+.choices input { width: auto; }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.err { color: var(--bad); font-size: 13px; margin-top: 6px; }
+@media (max-width: 700px) {
+  main { grid-template-columns: 1fr; } nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav h4 { display: none; } .hide-sm { display: none; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>⬇ DownloaderX</h1>
+  <button class="primary" onclick="openAdd()">+ Add URL</button>
+  <button id="bResume" onclick="act('resume')">▶ Resume</button>
+  <button id="bPause" onclick="act('pause')">⏸ Pause</button>
+  <button id="bRetry" onclick="act('retry')">↻ Retry</button>
+  <button id="bUp" onclick="act('up')" title="Higher priority">▲</button>
+  <button id="bDown" onclick="act('down')" title="Lower priority">▼</button>
+  <button id="bDel" onclick="removeSel()">✕ Delete</button>
+  <button onclick="api('/all/resume','POST')">Start all</button>
+  <button onclick="api('/all/pause','POST')">Stop all</button>
+  <button onclick="api('/clear','POST')">Clear finished</button>
+  <button onclick="openSettings()">⚙ Settings</button>
+  <span class="stat" id="stat"></span>
+</header>
+<main>
+  <nav id="nav"></nav>
+  <section>
+    <table>
+      <thead><tr><th>Name</th><th>Size</th><th>Progress</th><th class="hide-sm">Speed</th><th class="hide-sm">Time left</th><th>Status</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="detail"></div>
+  </section>
+</main>
+
+<dialog id="add">
+  <h3>Add download</h3>
+  <label>URL (file, .m3u8 stream, or video page)</label>
+  <div class="row"><input id="aUrl" placeholder="https://…"><button style="flex:0" onclick="check()">Check</button></div>
+  <div class="choices" id="aChoices"></div>
+  <div class="err" id="aErr"></div>
+  <label>File name (optional)</label><input id="aName">
+  <div class="row">
+    <div><label>Start at (optional)</label><input id="aAt" type="datetime-local"></div>
+    <div><label>Priority</label><select id="aPri"><option value="1">High</option><option value="0" selected>Normal</option><option value="-1">Low</option></select></div>
+  </div>
+  <label>SHA-256 to verify (optional)</label><input id="aSha" placeholder="64 hex characters">
+  <div class="actions"><button onclick="add.close()">Cancel</button><button onclick="submitAdd(true)">Add paused</button><button class="primary" onclick="submitAdd(false)">Download</button></div>
+</dialog>
+
+<dialog id="settings">
+  <h3>Settings</h3>
+  <div class="row">
+    <div><label>Downloads at once</label><input id="sMax" type="number" min="1" max="20"></div>
+    <div><label>Connections per file</label><input id="sConn" type="number" min="1" max="32"></div>
+  </div>
+  <label>Speed limit (KiB/s, 0 = unlimited)</label><input id="sLimit" type="number" min="0">
+  <label>Download folder</label><input id="sDir">
+  <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input id="sCat" type="checkbox" style="width:auto"> Sort into category folders (Video, Music, …)</label>
+  <div class="actions"><button onclick="settings.close()">Cancel</button><button class="primary" onclick="saveSettings()">Save</button></div>
+</dialog>
+
+<script>
+const H = { 'x-downloaderx': '1', 'content-type': 'application/json' };
+const api = (p, method = 'GET', body) =>
+  fetch('/api' + p, { method, headers: H, body: body && JSON.stringify(body) }).then(async r => {
+    const t = await r.text(); let j; try { j = JSON.parse(t) } catch { j = t }
+    if (!r.ok) throw new Error(j.error || j || r.status); return j;
+  });
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const size = b => { if (!b) return '—'; const u = ['B','KB','MB','GB','TB']; let i = 0; while (b >= 1024 && i < 4) { b /= 1024; i++ } return b.toFixed(i ? 1 : 0) + ' ' + u[i]; };
+const dur = s => !isFinite(s) || s <= 0 ? '—' : s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.floor(s/60) + 'm ' + Math.round(s%60) + 's' : Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm';
+
+let items = [], sel = null, filter = 'All';
+const CATS = ['Video', 'Music', 'Documents', 'Compressed', 'Programs', 'Images', 'General'];
+const STATES = { Running: 'running', Queued: 'queued', Paused: 'paused', Finished: 'done', Failed: 'failed' };
+
+function render() {
+  const count = f => items.filter(f).length;
+  const link = (name, f) => `<a class="${filter === name ? 'on' : ''}" onclick="filter='${name}';render()">${name}<span>${count(f)}</span></a>`;
+  $('nav').innerHTML = link('All', () => true) + '<h4>Status</h4>' +
+    Object.entries(STATES).map(([n, s]) => link(n, i => i.status === s)).join('') + '<h4>Category</h4>' +
+    CATS.map(c => link(c, i => i.category === c)).join('');
+  const show = items.filter(i => filter === 'All' || i.category === filter || i.status === STATES[filter])
+    .sort((a, b) => b.id - a.id);
+  $('rows').innerHTML = show.length ? show.map(i => {
+    const pct = i.total ? Math.min(100, i.downloaded / i.total * 100) : (i.status === 'done' ? 100 : 0);
+    const left = i.speed ? (i.total - i.downloaded) / i.speed : NaN;
+    return `<tr class="${i.id === sel ? 'sel' : ''}" onclick="sel=${i.id};render()" ondblclick="sel=${i.id};act(['running','queued'].includes('${i.status}')?'pause':'resume')">
+      <td class="name" title="${esc(i.name || i.url)}">${esc(i.name || i.url)}</td>
+      <td>${size(i.total)}</td>
+      <td><div class="bar"><i style="left:0;width:${pct}%"></i></div> ${pct.toFixed(0)}%</td>
+      <td class="hide-sm">${i.status === 'running' ? size(i.speed) + '/s' : ''}</td>
+      <td class="hide-sm">${i.status === 'running' ? dur(left) : ''}</td>
+      <td><span class="pill ${i.status}">${i.status}${i.verified === true ? ' ✓' : i.verified === false ? ' ✗ hash' : ''}</span></td></tr>`;
+  }).join('') : `<tr><td colspan="6" class="empty">No downloads here. Click “+ Add URL” or use the browser extension.</td></tr>`;
+
+  const it = items.find(i => i.id === sel);
+  for (const [b, ok] of [['bResume', ['paused', 'failed']], ['bPause', ['running', 'queued']], ['bRetry', ['failed']], ['bUp', null], ['bDown', null], ['bDel', null]])
+    $(b).disabled = !it || (ok && !ok.includes(it.status));
+  const d = $('detail');
+  if (!it) { d.style.display = 'none'; } else {
+    d.style.display = 'block';
+    const segs = it.total && it.segments.length ? it.segments.map(([s, e, p]) =>
+      `<i style="left:${s / it.total * 100}%;width:${(p - s) / it.total * 100}%"></i>`).join('')
+      : `<i style="left:0;width:${it.total ? it.downloaded / it.total * 100 : 0}%"></i>`;
+    d.innerHTML = `<b>${esc(it.name || 'Untitled')}</b>
+      <div class="segs" title="Each block is a connection's progress">${segs}</div>
+      <div class="kv">
+        <b>Downloaded</b><span>${size(it.downloaded)} of ${size(it.total)}</span>
+        <b>Connections</b><span>${it.segments.filter(s => s[2] < s[1]).length || '—'} active / ${it.segments.length || '—'} parts</span>
+        <b>Type</b><span>${it.kind.type}${it.kind.format ? ' · ' + esc(it.kind.format) : ''}</span>
+        <b>Priority</b><span>${it.priority}</span>
+        ${it.start_after ? `<b>Starts</b><span>${new Date(it.start_after * 1000).toLocaleString()}</span>` : ''}
+        <b>Saved to</b><code>${esc(it.path || '—')}</code>
+        <b>URL</b><code>${esc(it.url)}</code>
+        ${it.sha256 ? `<b>SHA-256</b><code>${esc(it.sha256)} ${it.verified === true ? '✓ matches' : it.verified === false ? '✗ does not match' : ''}</code>` : ''}
+        ${it.error ? `<b>Error</b><span style="color:var(--bad)">${esc(it.error)}</span>` : ''}
+      </div>`;
+  }
+  const run = items.filter(i => i.status === 'running');
+  $('stat').textContent = `${run.length} active · ${size(run.reduce((a, i) => a + i.speed, 0))}/s`;
+}
+
+async function poll() {
+  try { items = await api('/items'); render(); } catch { $('stat').textContent = 'disconnected'; }
+}
+setInterval(poll, 1000); poll();
+
+const act = a => sel && api(`/items/${sel}/${a}`, 'POST').then(poll);
+function removeSel() {
+  const it = items.find(i => i.id === sel); if (!it) return;
+  const files = it.status === 'done' && confirm('Also delete the downloaded file from disk?\nOK = delete file, Cancel = keep file');
+  api(`/items/${sel}/${files ? 'delete' : 'remove'}`, 'POST').then(() => { sel = null; poll(); });
+}
+
+let choices = [];
+function openAdd(url = '') {
+  $('aUrl').value = url; $('aName').value = ''; $('aSha').value = ''; $('aAt').value = '';
+  $('aChoices').innerHTML = ''; $('aErr').textContent = ''; choices = [];
+  add.showModal(); if (url) check();
+}
+async function check() {
+  $('aErr').textContent = ''; $('aChoices').innerHTML = 'Checking…';
+  try {
+    const r = await api('/probe', 'POST', { url: $('aUrl').value.trim() });
+    choices = r.choices;
+    if (r.title && !$('aName').value && r.choices[0]?.kind.type !== 'direct') $('aName').value = r.title;
+    $('aChoices').innerHTML = choices.map((c, i) =>
+      `<label><input type="radio" name="q" value="${i}" ${i ? '' : 'checked'}> ${esc(c.label)} <span style="margin-left:auto;color:var(--muted)">${c.size ? size(c.size) : ''}</span></label>`).join('');
+  } catch (e) { $('aChoices').innerHTML = ''; $('aErr').textContent = e.message; }
+}
+async function submitAdd(paused) {
+  const url = $('aUrl').value.trim(); if (!url) return;
+  const q = document.querySelector('input[name=q]:checked');
+  const c = q ? choices[q.value] : { url, kind: { type: 'direct' } };
+  const at = $('aAt').value ? Math.floor(new Date($('aAt').value) / 1000) : null;
+  try {
+    await api('/add', 'POST', { url: c.url, kind: c.kind, name: $('aName').value || null, priority: +$('aPri').value,
+      start_after: at, sha256: $('aSha').value || null, paused });
+    add.close(); poll();
+  } catch (e) { $('aErr').textContent = e.message; }
+}
+
+async function openSettings() {
+  const s = await api('/settings');
+  $('sMax').value = s.max_active; $('sConn').value = s.connections; $('sLimit').value = s.speed_limit;
+  $('sDir').value = s.download_dir; $('sCat').checked = s.categorize; settings.showModal();
+}
+async function saveSettings() {
+  await api('/settings', 'POST', { max_active: +$('sMax').value || 3, connections: +$('sConn').value || 8,
+    speed_limit: +$('sLimit').value || 0, download_dir: $('sDir').value, categorize: $('sCat').checked });
+  settings.close();
+}
+// Paste a link anywhere to add it.
+document.addEventListener('paste', e => {
+  if (document.querySelector('dialog[open]')) return;
+  const t = e.clipboardData.getData('text').trim(); if (/^https?:\/\//.test(t)) openAdd(t);
+});
+</script>
+</body>
+</html>
