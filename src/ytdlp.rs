@@ -7,7 +7,6 @@ use std::sync::atomic::Ordering::Relaxed;
 use anyhow::{bail, Context, Result};
 use serde::Serialize;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 
 use crate::engine::{Cancelled, Progress};
@@ -21,12 +20,12 @@ pub struct Quality {
 }
 
 pub async fn available() -> bool {
-    Command::new("yt-dlp").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().await.is_ok_and(|s| s.success())
+    crate::command("yt-dlp").arg("--version").stdout(Stdio::null()).stderr(Stdio::null()).status().await.is_ok_and(|s| s.success())
 }
 
 /// Returns (title, qualities) for a page URL.
 pub async fn formats(url: &str) -> Result<(String, Vec<Quality>)> {
-    let out = Command::new("yt-dlp").args(["-J", "--no-playlist", "--no-warnings", "--", url]).output().await?;
+    let out = crate::command("yt-dlp").args(["-J", "--no-playlist", "--no-warnings", "--", url]).output().await?;
     if !out.status.success() {
         bail!("yt-dlp: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or("failed"));
     }
@@ -83,7 +82,7 @@ pub async fn download(
     cancel: &CancellationToken,
 ) -> Result<PathBuf> {
     tokio::fs::create_dir_all(dir).await?;
-    let mut cmd = Command::new("yt-dlp");
+    let mut cmd = crate::command("yt-dlp");
     // `--print` implies `--quiet`, which hides the progress template unless `--progress` is given.
     cmd.args(["--no-playlist", "--newline", "--no-warnings", "--progress", "-f", format])
         .args(["-N", &conns.to_string()])
@@ -91,7 +90,9 @@ pub async fn download(
         .args(["--print", "after_move:DXPATH %(filepath)s"])
         .arg("-P")
         .arg(dir)
-        .args(["-o", "%(title).150B [%(id)s].%(ext)s"]);
+        // Quality in the name, so a second download in another quality doesn't hit
+        // "already downloaded" and silently return the first file.
+        .args(["-o", "%(title).150B [%(id)s]%(height& {}p|)s.%(ext)s"]);
     if rate_limit > 0 {
         cmd.args(["-r", &rate_limit.to_string()]);
     }

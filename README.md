@@ -1,6 +1,6 @@
 # DownloaderX
 
-Open-source, multi-connection download manager in Rust, with a Chrome extension.
+Open-source, multi-connection download manager for Windows, written in Rust, with a Chrome/Edge extension.
 
 ## Features
 
@@ -12,7 +12,9 @@ Open-source, multi-connection download manager in Rust, with a Chrome extension.
 - **SHA-256 check**: paste the expected hash and the app checks the file when it finishes
 - **Stream videos (HLS .m3u8)**: pick the quality, AES-128 decryption, joined into .mp4 with ffmpeg
 - **Site videos (YouTube etc.)**: through [yt-dlp](https://github.com/yt-dlp/yt-dlp), with a quality list
-- **Dashboard** at http://127.0.0.1:6801: shows each connection's progress, speed and time left; paste a link anywhere to add it
+- **Desktop app**: classic download-manager window with toolbar, categories (All / Unfinished / Finished / Queues), sortable list with real Windows file icons, right-click menu, progress window per download, Options, Scheduler and a "Download complete" notice
+- **Runs in the tray**: closing the window keeps it running so the browser extension still works; starting it again brings the window back
+- **Paste or drag a link** anywhere in the window to add it; batch add from a list of links
 
 ## Chrome extension
 
@@ -24,27 +26,33 @@ Open-source, multi-connection download manager in Rust, with a Chrome extension.
 
 DRM-protected streams (Netflix, Disney+, …) are not supported.
 
-## Install (Windows)
+## Install (Windows 10/11)
 
-1. Run `downloaderx.exe`. The dashboard opens in your browser.
-2. Chrome → `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the `extension` folder.
-3. Optional: install `yt-dlp` and `ffmpeg` (e.g. `winget install yt-dlp ffmpeg`) for YouTube-style sites and .mp4 output.
+1. Run `DownloaderX-Setup-<version>.exe` and follow the wizard. It can add a desktop icon, start DownloaderX with Windows, and install yt-dlp + ffmpeg for you.
+2. Chrome or Edge → `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the `extension` folder inside the install folder (Start menu → *DownloaderX browser extension folder*).
+
+Uninstall from Windows Settings → Apps. Your download list and settings in `%APPDATA%\downloaderx` are kept.
 
 ## Command line
 
 ```
-downloaderx                      # run app + dashboard (same as `serve`)
-downloaderx serve --port 6801 --no-open
+downloaderx                      # desktop app (window + tray)
+downloaderx --hidden             # start in the tray only (used for autostart)
+downloaderx serve --port 6801 --no-open   # no window: web dashboard at http://127.0.0.1:6801
 downloaderx get <URL> [-o FILE] [-c 16] [-l 500]   # one file, -l = KiB/s limit
 ```
 
 ## Build
 
+Needs Rust (MSVC toolchain) and, for the installer, [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`winget install JRSoftware.InnoSetup`).
+
 ```
 cargo build --release
-cargo build --release --target x86_64-pc-windows-gnu   # Windows exe from Linux (needs mingw-w64)
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer\downloaderx.iss   # -> dist\DownloaderX-Setup-<version>.exe
 ```
+
+The window is the same page as the web dashboard, shown in WebView2 (built into Windows 10/11).
 
 ## Security
 
-The API listens only on 127.0.0.1. It accepts only `Host: 127.0.0.1/localhost`, needs an `x-downloaderx` header, and allows CORS only from browser extensions, so websites can't add downloads.
+The API listens only on 127.0.0.1. It accepts only `Host: 127.0.0.1/localhost`, needs an `x-downloaderx` header, and allows CORS only from browser extensions, so websites can't add downloads. Opening files, opening folders, autostart and exit are not in the HTTP API at all: only the app's own window can do them.

@@ -161,7 +161,7 @@
       ev.stopPropagation();
       const c = choices[b.dataset.i];
       const name = c.kind.type === 'direct' ? null : choices.title || title();
-      const r = await send({ type: 'download', url: c.url, kind: c.kind, name, referer: location.href });
+      const r = await send({ type: 'download', url: c.url, kind: c.kind, name, referer: location.href, description: c.kind.type === 'direct' ? null : c.label });
       menu.innerHTML = r.error ? `<div class="err">${esc(r.error)}</div>` : `<div class="ok">✓ Added: ${esc(c.label)}</div>`;
       setTimeout(closeMenu, r.error ? 4000 : 1500);
     }));

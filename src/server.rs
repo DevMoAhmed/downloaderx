@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, Request, State};
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
@@ -22,7 +22,8 @@ type AppState = Arc<Manager>;
 /// cross-origin requests without a CORS preflight, and CORS only allows extension origins.
 const API_HEADER: &str = "x-downloaderx";
 
-pub async fn serve(mgr: Arc<Manager>, port: u16) -> anyhow::Result<()> {
+/// `listener` is bound by the caller, so a second app instance can notice the first one.
+pub async fn serve(mgr: Arc<Manager>, listener: std::net::TcpListener) -> anyhow::Result<()> {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::predicate(|o: &HeaderValue, _| {
             let o = o.as_bytes();
@@ -39,16 +40,21 @@ pub async fn serve(mgr: Arc<Manager>, port: u16) -> anyhow::Result<()> {
         .route("/all/{action}", post(all_action))
         .route("/clear", post(clear))
         .route("/settings", get(get_settings).post(set_settings))
+        .route("/schedule", post(schedule))
+        .route("/show", post(show))
+        .route("/icon", get(icon))
         .route("/probe", post(probe));
 
     let app = Router::new()
         .route("/", get(ui))
+        .route("/favicon.ico", get(favicon))
         .nest("/api", api)
         .layer(middleware::from_fn(require_header))
         .layer(cors)
         .with_state(mgr);
-    let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
-    println!("DownloaderX running at http://127.0.0.1:{port}");
+    listener.set_nonblocking(true)?;
+    let listener = tokio::net::TcpListener::from_std(listener)?;
+    println!("DownloaderX running at http://{}", listener.local_addr()?);
     axum::serve(listener, app).await?;
     Ok(())
 }
@@ -60,7 +66,8 @@ async fn require_header(req: Request, next: Next) -> Response {
     if !matches!(host, "127.0.0.1" | "localhost") {
         return (StatusCode::FORBIDDEN, "bad host").into_response();
     }
-    if req.method() == Method::OPTIONS || req.uri().path() == "/" || req.headers().contains_key(API_HEADER) {
+    let public = matches!(req.uri().path(), "/" | "/favicon.ico");
+    if req.method() == Method::OPTIONS || public || req.headers().contains_key(API_HEADER) {
         next.run(req).await
     } else {
         (StatusCode::FORBIDDEN, "missing x-downloaderx header").into_response()
@@ -69,6 +76,10 @@ async fn require_header(req: Request, next: Next) -> Response {
 
 async fn ui() -> Html<&'static str> {
     Html(include_str!("ui.html"))
+}
+
+async fn favicon() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/x-icon")], &include_bytes!("../assets/downloaderx.ico")[..])
 }
 
 async fn status(State(m): State<AppState>) -> Json<serde_json::Value> {
@@ -96,6 +107,10 @@ async fn all_action(State(m): State<AppState>, Path(action): Path<String>) -> St
             m.all(&action);
             StatusCode::OK
         }
+        "stop_queue" => {
+            m.stop_queue();
+            StatusCode::OK
+        }
         _ => StatusCode::BAD_REQUEST,
     }
 }
@@ -112,6 +127,48 @@ async fn get_settings(State(m): State<AppState>) -> Json<Settings> {
 async fn set_settings(State(m): State<AppState>, Json(s): Json<Settings>) -> StatusCode {
     m.set_settings(s);
     StatusCode::OK
+}
+
+#[derive(Deserialize)]
+struct ScheduleReq {
+    ids: Vec<u64>,
+    at: Option<u64>,
+}
+
+async fn schedule(State(m): State<AppState>, Json(r): Json<ScheduleReq>) -> StatusCode {
+    m.schedule(&r.ids, r.at);
+    StatusCode::OK
+}
+
+/// Bring the desktop window to the front (used by a second launch and the extension).
+async fn show(State(m): State<AppState>) -> StatusCode {
+    match m.show_window.get() {
+        Some(f) => {
+            f();
+            StatusCode::OK
+        }
+        None => StatusCode::NOT_FOUND,
+    }
+}
+
+#[derive(Deserialize)]
+struct IconReq {
+    /// A finished item: icon of the real file (e.g. an installer's own icon).
+    id: Option<u64>,
+    /// Otherwise the generic icon for this extension.
+    ext: Option<String>,
+}
+
+/// File-type icon from the Windows shell, as PNG.
+async fn icon(State(m): State<AppState>, Query(q): Query<IconReq>) -> Response {
+    let file = q.id.and_then(|id| m.items().into_iter().find(|i| i.id == id)).and_then(|i| i.path.filter(|p| p.exists()));
+    let ext = q.ext.unwrap_or_default();
+    let ext: String = ext.trim_start_matches('.').chars().filter(char::is_ascii_alphanumeric).take(12).collect();
+    let png = tokio::task::spawn_blocking(move || crate::shell_icon(file.as_deref(), &ext)).await.ok().flatten();
+    match png {
+        Some(png) => ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "max-age=3600")], png).into_response(),
+        None => StatusCode::NOT_FOUND.into_response(),
+    }
 }
 
 #[derive(Deserialize)]

@@ -1,8 +1,15 @@
+// No console window when started from the Start menu; `get` attaches to the caller's console.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 mod engine;
+#[cfg(windows)]
+mod gui;
 mod hls;
 mod limiter;
 mod queue;
 mod server;
+#[cfg(windows)]
+mod win;
 mod ytdlp;
 
 use std::path::PathBuf;
@@ -23,11 +30,14 @@ pub const DEFAULT_PORT: u16 = 6801;
 struct Args {
     #[command(subcommand)]
     cmd: Option<Cmd>,
+    /// Start in the tray without showing the window (used for autostart)
+    #[arg(long)]
+    hidden: bool,
 }
 
 #[derive(Subcommand)]
 enum Cmd {
-    /// Run the download manager (dashboard + browser extension API). Default.
+    /// Run without a window: dashboard in the browser + extension API
     Serve {
         #[arg(short, long, default_value_t = DEFAULT_PORT)]
         port: u16,
@@ -61,15 +71,55 @@ pub fn client() -> Result<Client> {
         .build()?)
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    match Args::parse().cmd.unwrap_or(Cmd::Serve { port: DEFAULT_PORT, no_open: false }) {
-        Cmd::Serve { port, no_open } => serve(port, !no_open).await,
-        Cmd::Get { url, output, connections, retries, limit } => get(url, output, connections, retries, limit).await,
+/// Child process without a console window (the GUI exe has none to share).
+pub fn command(program: &str) -> tokio::process::Command {
+    #[allow(unused_mut)]
+    let mut c = tokio::process::Command::new(program);
+    #[cfg(windows)]
+    c.creation_flags(win::CREATE_NO_WINDOW);
+    c
+}
+
+#[cfg(windows)]
+pub use win::shell_icon;
+#[cfg(not(windows))]
+pub fn shell_icon(_file: Option<&std::path::Path>, _ext: &str) -> Option<Vec<u8>> {
+    None
+}
+
+fn main() -> Result<()> {
+    #[cfg(windows)]
+    {
+        win::refresh_path();
+        if std::env::args_os().len() > 1 {
+            win::attach_console();
+        }
+    }
+    let args = Args::parse();
+    let rt = tokio::runtime::Runtime::new()?;
+    match args.cmd {
+        Some(Cmd::Serve { port, no_open }) => rt.block_on(serve(port, !no_open)),
+        Some(Cmd::Get { url, output, connections, retries, limit }) => rt.block_on(get(url, output, connections, retries, limit)),
+        #[cfg(windows)]
+        None => desktop(rt, args.hidden),
+        #[cfg(not(windows))]
+        None => rt.block_on(serve(DEFAULT_PORT, !args.hidden)),
     }
 }
 
-async fn serve(port: u16, open: bool) -> Result<()> {
+async fn start(port: u16) -> Result<Option<(Arc<queue::Manager>, std::net::TcpListener)>> {
+    let listener = match std::net::TcpListener::bind(("127.0.0.1", port)) {
+        Ok(l) => l,
+        Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
+            // Already running: bring that instance to the front instead.
+            let r = reqwest::Client::new().post(format!("http://127.0.0.1:{port}/api/show")).header("x-downloaderx", "1").send().await;
+            if r.is_ok() {
+                return Ok(None);
+            }
+            return Err(e.into());
+        }
+        Err(e) => return Err(e.into()),
+    };
     let data_dir = dirs::data_dir().unwrap_or_else(|| ".".into()).join("downloaderx");
     let mgr = queue::Manager::new(client()?, &data_dir).await;
     if !mgr.ytdlp {
@@ -79,10 +129,26 @@ async fn serve(port: u16, open: bool) -> Result<()> {
         eprintln!("note: ffmpeg not found, HLS videos are saved as .ts and qualities above 720p on some sites may lack audio");
     }
     tokio::spawn(mgr.clone().run());
+    Ok(Some((mgr, listener)))
+}
+
+async fn serve(port: u16, open: bool) -> Result<()> {
+    let Some((mgr, listener)) = start(port).await? else {
+        println!("DownloaderX is already running");
+        return Ok(());
+    };
     if open {
         open_browser(&format!("http://127.0.0.1:{port}"));
     }
-    server::serve(mgr, port).await
+    server::serve(mgr, listener).await
+}
+
+/// Window + tray on the main thread, downloads and the local API on the tokio runtime.
+#[cfg(windows)]
+fn desktop(rt: tokio::runtime::Runtime, hidden: bool) -> Result<()> {
+    let Some((mgr, listener)) = rt.block_on(start(DEFAULT_PORT))? else { return Ok(()) };
+    rt.spawn(server::serve(mgr.clone(), listener));
+    gui::run(mgr, DEFAULT_PORT, hidden)
 }
 
 async fn get(url: String, output: Option<PathBuf>, connections: usize, retries: u32, limit: u64) -> Result<()> {
@@ -133,12 +199,12 @@ async fn get(url: String, output: Option<PathBuf>, connections: usize, retries: 
 
 fn open_browser(url: &str) {
     #[cfg(target_os = "windows")]
-    let r = std::process::Command::new("cmd").args(["/C", "start", "", url]).spawn();
+    let ok = win::shell_open(url);
     #[cfg(target_os = "macos")]
-    let r = std::process::Command::new("open").arg(url).spawn();
+    let ok = std::process::Command::new("open").arg(url).spawn().is_ok();
     #[cfg(all(unix, not(target_os = "macos")))]
-    let r = std::process::Command::new("xdg-open").arg(url).spawn();
-    if r.is_err() {
+    let ok = std::process::Command::new("xdg-open").arg(url).spawn().is_ok();
+    if !ok {
         println!("open {url} in your browser");
     }
 }

@@ -96,15 +96,16 @@ async function probe(url, referer) {
   return app('/probe', { url, headers: await headersFor(url, referer) });
 }
 
-async function download({ url, kind, name, referer }) {
-  return app('/add', { url, kind: kind || { type: 'direct' }, name: name || null, headers: await headersFor(url, referer) });
+async function download({ url, kind, name, referer, description }) {
+  return app('/add', { url, kind: kind || { type: 'direct' }, name: name || null, description: description || null, headers: await headersFor(url, referer) });
 }
 
 /// Probe and add the best choice (used by the context menu).
 async function downloadBest(url, referer, name) {
   const r = await probe(url, referer);
   const c = r.choices[0];
-  await download({ url: c.url, kind: c.kind, name: c.kind.type === 'direct' ? null : name || r.title, referer });
+  const direct = c.kind.type === 'direct';
+  await download({ url: c.url, kind: c.kind, name: direct ? null : name || r.title, referer, description: direct ? null : c.label });
   return c.label;
 }
 
@@ -129,6 +130,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       case 'probe': return probe(msg.url, msg.referer);
       case 'download': return download(msg);
       case 'status': return app('/status');
+      case 'show': return app('/show', {});
       case 'settings': return chrome.storage.local.get({ intercept: true });
       case 'setSettings': return chrome.storage.local.set(msg.settings);
     }

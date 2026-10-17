@@ -298,7 +298,7 @@ pub async fn download(
         }
 
         if ffmpeg {
-            let mut cmd = tokio::process::Command::new("ffmpeg");
+            let mut cmd = crate::command("ffmpeg");
             cmd.args(["-y", "-loglevel", "error", "-i"]).arg(&video_tmp);
             if audio.is_some() {
                 cmd.arg("-i").arg(&audio_tmp).args(["-map", "0:v", "-map", "1:a"]);
@@ -326,7 +326,7 @@ pub async fn download(
 }
 
 pub async fn has_ffmpeg() -> bool {
-    tokio::process::Command::new("ffmpeg")
+    crate::command("ffmpeg")
         .arg("-version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())

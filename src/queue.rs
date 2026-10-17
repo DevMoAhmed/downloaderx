@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering::Relaxed;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::Result;
@@ -59,6 +59,12 @@ pub struct Item {
     pub verified: Option<bool>,
     #[serde(default)]
     pub segments: Vec<[u64; 3]>,
+    /// When the download was last started.
+    #[serde(default)]
+    pub last_try: Option<u64>,
+    /// Free text shown in the list, e.g. the chosen quality.
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -99,6 +105,7 @@ pub struct AddRequest {
     /// Add paused instead of queued.
     #[serde(default)]
     pub paused: bool,
+    pub description: Option<String>,
 }
 
 fn direct() -> Kind {
@@ -127,6 +134,8 @@ pub struct Manager {
     file: PathBuf,
     pub ffmpeg: bool,
     pub ytdlp: bool,
+    /// Brings the desktop window to the front (set by the GUI).
+    pub show_window: OnceLock<Box<dyn Fn() + Send + Sync>>,
 }
 
 pub fn now() -> u64 {
@@ -167,6 +176,7 @@ impl Manager {
             file,
             ffmpeg,
             ytdlp,
+            show_window: OnceLock::new(),
         })
     }
 
@@ -222,6 +232,8 @@ impl Manager {
             sha256: r.sha256.map(|s| s.trim().to_ascii_lowercase()).filter(|s| !s.is_empty()),
             verified: None,
             segments: vec![],
+            last_try: None,
+            description: r.description.filter(|d| !d.trim().is_empty()),
         });
         drop(d);
         self.wake.notify_one();
@@ -274,6 +286,29 @@ impl Manager {
         for id in ids {
             self.action(id, action);
         }
+    }
+
+    /// Hold the queue: waiting items are paused, running ones keep going.
+    pub fn stop_queue(&self) {
+        for it in self.data.lock().unwrap().items.iter_mut() {
+            if it.status == Status::Queued {
+                it.status = Status::Paused;
+            }
+        }
+    }
+
+    /// Queue unfinished items to start at `at` (unix seconds), or now when `None`.
+    pub fn schedule(&self, ids: &[u64], at: Option<u64>) {
+        let mut d = self.data.lock().unwrap();
+        for it in d.items.iter_mut().filter(|i| ids.contains(&i.id)) {
+            if matches!(it.status, Status::Queued | Status::Paused | Status::Failed) {
+                it.status = Status::Queued;
+                it.error = None;
+                it.start_after = at;
+            }
+        }
+        drop(d);
+        self.wake.notify_one();
     }
 
     pub fn clear_finished(&self) {
@@ -333,6 +368,7 @@ impl Manager {
             let it = &mut d.items[idx];
             it.status = Status::Running;
             it.speed = 0;
+            it.last_try = Some(t);
             let progress = Arc::new(Progress::default());
             let cancel = CancellationToken::new();
             running.insert(it.id, Running { progress: progress.clone(), cancel: cancel.clone(), last: it.downloaded });
@@ -394,6 +430,12 @@ impl Manager {
             }
             match result {
                 Ok(p) => {
+                    // yt-dlp prints no progress for a file it already had.
+                    if it.downloaded == 0 {
+                        if let Ok(m) = std::fs::metadata(&p) {
+                            it.downloaded = m.len();
+                        }
+                    }
                     it.name = p.file_name().map(|n| n.to_string_lossy().into_owned());
                     it.path = Some(p);
                     it.status = Status::Done;
@@ -416,7 +458,7 @@ impl Manager {
         self.wake.notify_one();
     }
 
-    fn save(&self) {
+    pub fn save(&self) {
         let json = serde_json::to_vec_pretty(&*self.data.lock().unwrap());
         if let Ok(json) = json {
             if let Some(dir) = self.file.parent() {

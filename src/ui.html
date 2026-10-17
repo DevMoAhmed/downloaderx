@@ -3,239 +3,1058 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
 <title>DownloaderX</title>
 <style>
 :root {
-  --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #6b7385; --line: #e3e6ec;
-  --accent: #2f6fed; --accent-soft: #e6eefe; --ok: #1f9d55; --warn: #d98a00; --bad: #d64545;
-  --bar: #e9ecf2;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --bg: #14171d; --panel: #1c2028; --text: #e6e9ef; --muted: #8f97a8; --line: #2b313c;
-    --accent: #5b8cff; --accent-soft: #23304d; --bar: #2a303b; }
+  --face: #f3f3f3; --win: #fff; --text: #1b1b1b; --muted: #6b6b6b; --line: #d9d9d9; --line2: #e8e8e8;
+  --sel: #cce8ff; --sel-line: #99d1ff; --hover: #e5f3ff; --accent: #0067c0; --bad: #c42b1c; --ok: #0f7b0f;
+  --menu-hover: #e0eefb;
 }
 * { box-sizing: border-box; }
-body { margin: 0; font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; background: var(--bg); color: var(--text); }
-header { display: flex; align-items: center; gap: 8px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-header h1 { font-size: 16px; margin: 0 12px 0 0; }
-header .stat { margin-left: auto; color: var(--muted); font-size: 13px; }
-button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-button:hover:not(:disabled) { border-color: var(--accent); }
-button:disabled { opacity: .45; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-main { display: grid; grid-template-columns: 180px 1fr; min-height: calc(100vh - 53px); }
-nav { background: var(--panel); border-right: 1px solid var(--line); padding: 8px; }
-nav a { display: flex; justify-content: space-between; padding: 6px 10px; border-radius: 6px; color: var(--text); text-decoration: none; cursor: pointer; }
-nav a.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-nav a span { color: var(--muted); font-size: 12px; }
-nav h4 { margin: 12px 10px 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .05em; }
-section { padding: 12px 16px; overflow: auto; }
-table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-th { font-size: 12px; color: var(--muted); font-weight: 600; }
-tr.sel td { background: var(--accent-soft); }
-tbody tr { cursor: pointer; }
-td.name { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
-.bar { position: relative; height: 8px; width: 160px; background: var(--bar); border-radius: 4px; overflow: hidden; }
-.bar i { position: absolute; top: 0; bottom: 0; background: var(--accent); }
-.pill { font-size: 12px; padding: 2px 8px; border-radius: 10px; background: var(--bar); }
-.pill.running { background: var(--accent-soft); color: var(--accent); }
-.pill.done { color: var(--ok); } .pill.failed { color: var(--bad); } .pill.paused { color: var(--warn); }
-.empty { padding: 40px; text-align: center; color: var(--muted); }
-#detail { margin-top: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: none; }
-#detail .segs { position: relative; height: 18px; background: var(--bar); border-radius: 4px; overflow: hidden; margin: 8px 0; }
-#detail .segs i { position: absolute; top: 0; bottom: 0; background: var(--accent); border-right: 1px solid var(--panel); }
-#detail .kv { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; font-size: 13px; }
-#detail .kv b { color: var(--muted); font-weight: 500; }
-#detail code { word-break: break-all; }
-dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); width: min(560px, calc(100vw - 32px)); padding: 18px; }
-dialog::backdrop { background: rgba(0,0,0,.4); }
-dialog h3 { margin: 0 0 12px; }
-label { display: block; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
-input, select { width: 100%; font: inherit; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); }
-.row { display: flex; gap: 8px; } .row > * { flex: 1; }
-.choices label { display: flex; gap: 8px; align-items: center; color: var(--text); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; margin: 4px 0; cursor: pointer; }
-.choices input { width: auto; }
-.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-.err { color: var(--bad); font-size: 13px; margin-top: 6px; }
-@media (max-width: 700px) {
-  main { grid-template-columns: 1fr; } nav { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); }
-  nav h4 { display: none; } .hide-sm { display: none; }
-}
+html, body { height: 100%; }
+body { margin: 0; font: 12px/1.35 "Segoe UI", system-ui, sans-serif; color: var(--text); background: var(--face);
+  user-select: none; -webkit-user-select: none; overflow: hidden; }
+input, select, textarea, button { font: inherit; color: inherit; }
+#app { display: flex; flex-direction: column; height: 100vh; }
+svg { display: block; }
+
+/* menu bar */
+.menubar { display: flex; background: var(--win); padding: 0 4px; border-bottom: 1px solid var(--line2); }
+.menubar > div { padding: 4px 9px; cursor: default; border-radius: 3px; margin: 2px 0; }
+.menubar > div:hover, .menubar > div.open { background: var(--menu-hover); }
+
+/* toolbar */
+.toolbar { display: flex; align-items: stretch; gap: 2px; padding: 5px 6px; background: var(--win); border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.tb { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 70px; padding: 4px 6px 3px; border: 1px solid transparent; border-radius: 4px; background: none; cursor: pointer; white-space: nowrap; }
+.tb svg { width: 32px; height: 32px; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tb:hover:not(:disabled) { background: var(--hover); border-color: #cde6fb; }
+.tb:active:not(:disabled) { background: var(--sel); }
+.tb:disabled { cursor: default; color: #a0a0a0; }
+.tb:disabled svg { filter: grayscale(1); opacity: .38; }
+.tb-sep { width: 1px; background: var(--line2); margin: 6px 3px; }
+
+/* body */
+.main { flex: 1; display: flex; min-height: 0; }
+#cats { width: 200px; min-width: 120px; max-width: 420px; background: var(--win); border-right: 1px solid var(--line); display: flex; flex-direction: column; }
+#cats.hidden, #split.hidden { display: none; }
+.cats-h { display: flex; align-items: center; padding: 4px 6px 4px 8px; border-bottom: 1px solid var(--line2); background: var(--face); }
+.cats-h b { font-weight: 400; flex: 1; }
+.xbtn { border: 0; background: none; width: 20px; height: 18px; line-height: 16px; border-radius: 3px; cursor: pointer; padding: 0; font-size: 13px; color: #444; }
+.xbtn:hover { background: #e81123; color: #fff; }
+.tree { list-style: none; margin: 0; padding: 4px 0 8px; overflow: auto; flex: 1; }
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.node { display: flex; align-items: center; gap: 4px; height: 21px; padding-right: 8px; cursor: default; white-space: nowrap; }
+.node .lbl { padding: 1px 4px; border: 1px solid transparent; border-radius: 2px; }
+.node:hover .lbl { background: var(--hover); }
+.node.on .lbl { background: var(--sel); border-color: var(--sel-line); }
+.node .cnt { color: var(--muted); font-size: 11px; }
+.exp { width: 11px; height: 11px; border: 1px solid #a0a0a0; background: #fff; font: 10px/9px monospace; text-align: center; color: #333; flex: none; cursor: pointer; }
+.exp.none { visibility: hidden; }
+.node svg { width: 16px; height: 16px; flex: none; }
+
+#split { width: 5px; cursor: col-resize; margin-left: -3px; z-index: 2; }
+
+/* list */
+.listwrap { flex: 1; overflow: auto; background: var(--win); position: relative; }
+table { border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 100%; }
+th { position: sticky; top: 0; z-index: 1; background: var(--win); font-weight: 400; text-align: left; height: 25px; padding: 0 6px;
+  border-bottom: 1px solid var(--line); border-right: 1px solid var(--line2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+th:hover { background: var(--hover); }
+th .rz { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; }
+th { position: sticky; }
+th.sorted::after { content: ''; position: absolute; left: 50%; top: 1px; margin-left: -4px; border: 4px solid transparent; }
+th.sorted.asc::after { border-bottom-color: #888; border-top: 0; }
+th.sorted.desc::after { border-top-color: #888; border-bottom: 0; }
+td { height: 22px; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-top: 1px solid transparent; border-bottom: 1px solid transparent; }
+td.num { text-align: right; }
+tbody tr:hover td { background: var(--hover); }
+tbody tr.sel td { background: var(--sel); border-color: var(--sel-line); }
+tbody tr.sel td:first-child { border-left: 1px solid var(--sel-line); }
+tbody tr.sel td:last-child { border-right: 1px solid var(--sel-line); }
+td.name { display: flex; align-items: center; gap: 5px; }
+td.name img, td.name .gi { width: 16px; height: 16px; flex: none; }
+td.name span { overflow: hidden; text-overflow: ellipsis; }
+.st-err { color: var(--bad); } .st-ok { color: var(--text); } .st-run { color: var(--accent); }
+.mini { display: inline-block; vertical-align: -2px; width: 46px; height: 9px; border: 1px solid #b9b9b9; background: #f4f4f4; margin-right: 6px; position: relative; }
+.mini i { position: absolute; left: 0; top: 0; bottom: 0; background: #06b025; }
+.empty { position: absolute; inset: 60px 0 auto; text-align: center; color: var(--muted); line-height: 1.8; }
+.empty b { color: var(--text); font-weight: 600; }
+
+/* status bar */
+.statusbar { display: flex; gap: 0; border-top: 1px solid var(--line); background: var(--face); height: 23px; align-items: center; }
+.statusbar > span { padding: 0 10px; border-right: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.statusbar > span:first-child { flex: 1; }
+.statusbar.hidden { display: none; }
+.ok { color: var(--ok); } .no { color: var(--bad); }
+
+/* popup menus */
+.pop { position: fixed; z-index: 50; background: #f9f9f9; border: 1px solid #ccc; box-shadow: 2px 3px 8px rgba(0,0,0,.18); padding: 3px; min-width: 210px; display: none; }
+.pop div.it { display: flex; align-items: center; gap: 8px; padding: 4px 24px 4px 8px; border-radius: 3px; cursor: default; white-space: nowrap; }
+.pop div.it .ck { width: 14px; text-align: center; }
+.pop div.it .k { margin-left: auto; padding-left: 28px; color: var(--muted); }
+.pop div.it:hover:not(.dis) { background: var(--menu-hover); }
+.pop div.it.dis { color: #a6a6a6; }
+.pop hr { border: 0; border-top: 1px solid #ddd; margin: 3px 4px; }
+
+/* dialogs */
+.veil { position: fixed; inset: 0; z-index: 40; display: none; }
+.veil.on { display: block; }
+.dlg { position: fixed; z-index: 41; background: var(--face); border: 1px solid #8a8a8a; box-shadow: 0 8px 28px rgba(0,0,0,.28); min-width: 340px; max-width: calc(100vw - 20px); max-height: calc(100vh - 20px); display: none; flex-direction: column; }
+.dlg.on { display: flex; }
+.dlg .tt { display: flex; align-items: center; gap: 6px; height: 30px; padding-left: 9px; background: var(--win); cursor: default; }
+.dlg .tt svg { width: 16px; height: 16px; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dlg .tt b { font-weight: 400; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dlg .tt .xbtn { width: 44px; height: 30px; font-size: 15px; border-radius: 0; }
+.dlg .bd { padding: 12px 14px; overflow: auto; user-select: text; -webkit-user-select: text; }
+.dlg .ft { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--line2); }
+.dlg .ft .left { margin-right: auto; }
+.btn { min-width: 82px; height: 25px; padding: 0 12px; border: 1px solid #b4b4b4; border-radius: 3px; background: #fdfdfd; cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--hover); border-color: #5aa0e0; }
+.btn.def { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.btn:disabled { color: #a0a0a0; cursor: default; }
+.dlg input[type=text], .dlg input[type=number], .dlg input[type=datetime-local], .dlg select, .dlg textarea {
+  height: 24px; padding: 2px 5px; border: 1px solid #b4b4b4; border-radius: 2px; background: #fff; width: 100%; }
+.dlg textarea { height: 150px; resize: vertical; font-family: Consolas, monospace; }
+.dlg input:focus, .dlg select:focus, .dlg textarea:focus { outline: none; border-color: var(--accent); }
+.dlg input[readonly] { background: var(--face); }
+.grid { display: grid; grid-template-columns: auto 1fr; gap: 7px 10px; align-items: center; }
+.grid > label { white-space: nowrap; }
+.chk { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.note { color: var(--muted); }
+.err { color: var(--bad); }
+fieldset { border: 1px solid var(--line); border-radius: 3px; padding: 8px 10px 10px; margin: 0 0 10px; }
+legend { padding: 0 4px; color: #333; }
+.qlist { max-height: 170px; overflow: auto; background: #fff; border: 1px solid #b4b4b4; }
+.qlist label { display: flex; gap: 8px; align-items: center; padding: 4px 8px; }
+.qlist label:hover { background: var(--hover); }
+.qlist label span { margin-left: auto; color: var(--muted); }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid #b4b4b4; margin-bottom: 12px; }
+.tabs div { padding: 5px 12px; border: 1px solid transparent; border-bottom: 0; margin-bottom: -1px; cursor: default; border-radius: 3px 3px 0 0; }
+.tabs div.on { background: var(--win); border-color: #b4b4b4; }
+.tabs div:hover:not(.on) { background: var(--hover); }
+.tab { display: none; } .tab.on { display: block; }
+.kv { display: grid; grid-template-columns: 120px 1fr; gap: 5px 10px; }
+.kv b { font-weight: 400; color: var(--muted); }
+.kv span, .kv code { overflow-wrap: anywhere; }
+code { font: 11.5px Consolas, monospace; }
+.pbar { height: 18px; border: 1px solid #bcbcbc; background: #e6e6e6; position: relative; margin: 10px 0 4px; }
+.pbar i { position: absolute; left: 0; top: 0; bottom: 0; background: #06b025; transition: width .3s; }
+.segs { height: 14px; border: 1px solid #bcbcbc; background: #fff; position: relative; overflow: hidden; }
+.segs i { position: absolute; top: 0; bottom: 0; background: #2f7fe0; border-right: 1px solid #fff; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid #cfd8e3; border-top-color: var(--accent); border-radius: 50%; animation: sp .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes sp { to { transform: rotate(360deg); } }
+
+/* completion toast */
+#toast { position: fixed; right: 14px; bottom: 34px; z-index: 30; width: 330px; background: var(--win); border: 1px solid #b4b4b4; box-shadow: 0 6px 20px rgba(0,0,0,.2); display: none; }
+#toast.on { display: block; }
+#toast .tt { display: flex; align-items: center; padding: 6px 4px 6px 10px; border-bottom: 1px solid var(--line2); }
+#toast .tt b { flex: 1; font-weight: 600; }
+#toast .bd { display: flex; gap: 10px; padding: 10px; align-items: center; }
+#toast .bd img, #toast .bd .gi { width: 32px; height: 32px; flex: none; }
+#toast .bd div { overflow: hidden; }
+#toast .bd div span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#toast .ft { display: flex; justify-content: flex-end; gap: 6px; padding: 0 10px 10px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>⬇ DownloaderX</h1>
-  <button class="primary" onclick="openAdd()">+ Add URL</button>
-  <button id="bResume" onclick="act('resume')">▶ Resume</button>
-  <button id="bPause" onclick="act('pause')">⏸ Pause</button>
-  <button id="bRetry" onclick="act('retry')">↻ Retry</button>
-  <button id="bUp" onclick="act('up')" title="Higher priority">▲</button>
-  <button id="bDown" onclick="act('down')" title="Lower priority">▼</button>
-  <button id="bDel" onclick="removeSel()">✕ Delete</button>
-  <button onclick="api('/all/resume','POST')">Start all</button>
-  <button onclick="api('/all/pause','POST')">Stop all</button>
-  <button onclick="api('/clear','POST')">Clear finished</button>
-  <button onclick="openSettings()">⚙ Settings</button>
-  <span class="stat" id="stat"></span>
-</header>
-<main>
-  <nav id="nav"></nav>
-  <section>
-    <table>
-      <thead><tr><th>Name</th><th>Size</th><th>Progress</th><th class="hide-sm">Speed</th><th class="hide-sm">Time left</th><th>Status</th></tr></thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div id="detail"></div>
-  </section>
-</main>
-
-<dialog id="add">
-  <h3>Add download</h3>
-  <label>URL (file, .m3u8 stream, or video page)</label>
-  <div class="row"><input id="aUrl" placeholder="https://…"><button style="flex:0" onclick="check()">Check</button></div>
-  <div class="choices" id="aChoices"></div>
-  <div class="err" id="aErr"></div>
-  <label>File name (optional)</label><input id="aName">
-  <div class="row">
-    <div><label>Start at (optional)</label><input id="aAt" type="datetime-local"></div>
-    <div><label>Priority</label><select id="aPri"><option value="1">High</option><option value="0" selected>Normal</option><option value="-1">Low</option></select></div>
+<div id="app">
+  <div class="menubar" id="menubar">
+    <div data-m="tasks">Tasks</div><div data-m="file">File</div><div data-m="downloads">Downloads</div><div data-m="view">View</div><div data-m="help">Help</div>
   </div>
-  <label>SHA-256 to verify (optional)</label><input id="aSha" placeholder="64 hex characters">
-  <div class="actions"><button onclick="add.close()">Cancel</button><button onclick="submitAdd(true)">Add paused</button><button class="primary" onclick="submitAdd(false)">Download</button></div>
-</dialog>
-
-<dialog id="settings">
-  <h3>Settings</h3>
-  <div class="row">
-    <div><label>Downloads at once</label><input id="sMax" type="number" min="1" max="20"></div>
-    <div><label>Connections per file</label><input id="sConn" type="number" min="1" max="32"></div>
+  <div class="toolbar" id="toolbar"></div>
+  <div class="main">
+    <aside id="cats">
+      <div class="cats-h"><b>Categories</b><button class="xbtn" title="Hide categories" onclick="toggleCats(false)">✕</button></div>
+      <ul class="tree" id="tree"></ul>
+    </aside>
+    <div id="split"></div>
+    <div class="listwrap" id="listwrap">
+      <table id="list"><colgroup id="cols"></colgroup><thead><tr id="head"></tr></thead><tbody id="rows"></tbody></table>
+      <div class="empty" id="empty" style="display:none"></div>
+    </div>
   </div>
-  <label>Speed limit (KiB/s, 0 = unlimited)</label><input id="sLimit" type="number" min="0">
-  <label>Download folder</label><input id="sDir">
-  <label style="display:flex;gap:8px;align-items:center;color:var(--text)"><input id="sCat" type="checkbox" style="width:auto"> Sort into category folders (Video, Music, …)</label>
-  <div class="actions"><button onclick="settings.close()">Cancel</button><button class="primary" onclick="saveSettings()">Save</button></div>
-</dialog>
+  <div class="statusbar" id="statusbar"><span id="sb1"></span><span id="sb2"></span><span id="sb3"></span></div>
+</div>
+
+<div class="pop" id="pop"></div>
+<div class="veil" id="veil"></div>
+
+<!-- Enter new address -->
+<div class="dlg" id="dAdd" style="width:520px">
+  <div class="tt"><span data-icon="app"></span><b>Enter new address to download</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd">
+    <div class="grid"><label for="aUrl">Address:</label><input type="text" id="aUrl" placeholder="https://… (file, .m3u8 stream or a video page)"></div>
+    <p class="note" style="margin:10px 0 0">Tip: copy a link and press <b>Ctrl+V</b> anywhere in DownloaderX, or drag a link onto the window.</p>
+  </div>
+  <div class="ft"><button class="btn def" id="aOk">OK</button><button class="btn" data-close>Cancel</button></div>
+</div>
+
+<!-- Download file info -->
+<div class="dlg" id="dInfo" style="width:560px">
+  <div class="tt"><span data-icon="app"></span><b>Download File Info</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd">
+    <div class="grid">
+      <label>URL</label><input type="text" id="iUrl" readonly>
+      <label for="iCat">Category</label><select id="iCat"></select>
+      <label for="iName">Save As</label><input type="text" id="iName" placeholder="(name from the server)">
+      <label>Folder</label><input type="text" id="iDir" readonly>
+      <label for="iDesc">Description</label><input type="text" id="iDesc">
+    </div>
+    <div style="margin:12px 0 4px" id="iQhead">Quality</div>
+    <div class="qlist" id="iQ"></div>
+    <div id="iMsg" style="margin-top:8px"></div>
+    <details style="margin-top:10px"><summary>More options</summary>
+      <div class="grid" style="margin-top:8px">
+        <label for="iPri">Priority</label><select id="iPri"><option value="1">High</option><option value="0" selected>Normal</option><option value="-1">Low</option></select>
+        <label for="iAt">Start at</label><input type="datetime-local" id="iAt">
+        <label for="iSha">SHA-256</label><input type="text" id="iSha" placeholder="optional: checked when the file finishes">
+      </div>
+    </details>
+  </div>
+  <div class="ft"><button class="btn" id="iLater">Download Later</button><button class="btn def" id="iStart">Start Download</button><button class="btn" data-close>Cancel</button></div>
+</div>
+
+<!-- Batch -->
+<div class="dlg" id="dBatch" style="width:560px">
+  <div class="tt"><span data-icon="app"></span><b>Add batch download</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd"><p style="margin:0 0 6px">Paste one link per line. Each one is added as a file download.</p><textarea id="bText"></textarea>
+    <label class="chk"><input type="checkbox" id="bPaused"> Add paused (start them later from the queue)</label><div id="bMsg"></div></div>
+  <div class="ft"><button class="btn def" id="bOk">Add</button><button class="btn" data-close>Cancel</button></div>
+</div>
+
+<!-- Options -->
+<div class="dlg" id="dOpt" style="width:520px">
+  <div class="tt"><span data-icon="options"></span><b>Options</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd">
+    <div class="tabs" id="oTabs"><div data-t="general" class="on">General</div><div data-t="conn">Connection</div><div data-t="save">Save to</div><div data-t="browser">Browser</div></div>
+    <div class="tab on" data-t="general">
+      <label class="chk desk"><input type="checkbox" id="oAuto"> Launch DownloaderX on Windows startup</label>
+      <label class="chk"><input type="checkbox" id="oToast"> Show a notice when a download completes</label>
+      <div class="grid" style="margin-top:10px"><label for="oMax">Downloads at the same time</label><input type="number" id="oMax" min="1" max="20" style="width:80px"></div>
+    </div>
+    <div class="tab" data-t="conn">
+      <div class="grid"><label for="oConn">Connections per download</label><select id="oConn" style="width:90px"></select></div>
+      <fieldset style="margin-top:12px"><legend>Speed limiter</legend>
+        <label class="chk"><input type="checkbox" id="oLimOn"> Limit total download speed</label>
+        <div class="grid"><label for="oLim">Maximum (KB/sec)</label><input type="number" id="oLim" min="1" style="width:110px"></div>
+      </fieldset>
+    </div>
+    <div class="tab" data-t="save">
+      <div class="grid"><label for="oDir">Download folder</label><div style="display:flex;gap:6px"><input type="text" id="oDir"><button class="btn desk" style="min-width:0" onclick="native('folder')">Open</button></div></div>
+      <label class="chk" style="margin-top:10px"><input type="checkbox" id="oCat"> Put files into category folders (Video, Music, Documents, …)</label>
+    </div>
+    <div class="tab" data-t="browser">
+      <p style="margin-top:0">The DownloaderX extension adds a <b>Download</b> button on videos, a right-click menu, and takes over normal downloads in Chrome and Edge.</p>
+      <ol style="padding-left:18px;line-height:1.7">
+        <li>Open <code>chrome://extensions</code> (or <code>edge://extensions</code>).</li>
+        <li>Turn on <b>Developer mode</b>.</li>
+        <li>Click <b>Load unpacked</b> and pick the extension folder.</li>
+      </ol>
+      <button class="btn desk" onclick="native('extension_folder')">Open extension folder</button>
+    </div>
+  </div>
+  <div class="ft"><button class="btn def" id="oOk">OK</button><button class="btn" data-close>Cancel</button></div>
+</div>
+
+<!-- Scheduler -->
+<div class="dlg" id="dSched" style="width:440px">
+  <div class="tt"><span data-icon="scheduler"></span><b>Scheduler</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd">
+    <fieldset><legend>Main download queue</legend>
+      <label class="chk"><input type="radio" name="sWhen" value="now" checked> Start now</label>
+      <label class="chk"><input type="radio" name="sWhen" value="at"> Start at <input type="datetime-local" id="sAt" style="width:210px;margin-left:6px"></label>
+    </fieldset>
+    <fieldset><legend>Apply to</legend>
+      <label class="chk"><input type="radio" name="sWho" value="all" checked> All unfinished downloads</label>
+      <label class="chk"><input type="radio" name="sWho" value="sel" id="sSel"> Selected downloads</label>
+    </fieldset>
+    <div class="grid"><label for="sMax">Downloads at the same time</label><input type="number" id="sMax" min="1" max="20" style="width:80px"></div>
+    <div id="sMsg" class="note" style="margin-top:8px"></div>
+  </div>
+  <div class="ft"><button class="btn left" id="sStop">Stop queue</button><button class="btn def" id="sOk">Apply</button><button class="btn" data-close>Close</button></div>
+</div>
+
+<!-- Delete -->
+<div class="dlg" id="dDel" style="width:420px">
+  <div class="tt"><span data-icon="delete"></span><b>Confirm deletion</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd"><p style="margin-top:0" id="delMsg"></p><label class="chk" id="delFilesRow"><input type="checkbox" id="delFiles"> Also delete the downloaded files from disk</label></div>
+  <div class="ft"><button class="btn def" id="delOk">Yes</button><button class="btn" data-close>No</button></div>
+</div>
+
+<!-- Properties -->
+<div class="dlg" id="dProp" style="width:560px">
+  <div class="tt"><span data-icon="app"></span><b>Properties</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd"><div class="kv" id="propKv"></div></div>
+  <div class="ft"><button class="btn left" id="propCopy">Copy address</button><button class="btn def" data-close>Close</button></div>
+</div>
+
+<!-- Download progress -->
+<div class="dlg" id="dProg" style="width:520px">
+  <div class="tt"><span data-icon="app"></span><b id="pgTitle"></b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd">
+    <div class="kv" id="pgKv"></div>
+    <div class="pbar"><i id="pgBar"></i></div>
+    <div class="note" style="margin:10px 0 4px">Start positions and download progress by connection</div>
+    <div class="segs" id="pgSegs"></div>
+  </div>
+  <div class="ft"><button class="btn left" id="pgFolder">Open folder</button><button class="btn" id="pgOpen">Open</button><button class="btn def" id="pgPause">Pause</button><button class="btn" data-close>Close</button></div>
+</div>
+
+<!-- About -->
+<div class="dlg" id="dAbout" style="width:420px">
+  <div class="tt"><span data-icon="app"></span><b>About DownloaderX</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd" id="aboutBd"></div>
+  <div class="ft"><button class="btn def" data-close>OK</button></div>
+</div>
+
+<div id="toast"><div class="tt"><b>Download complete</b><button class="xbtn" onclick="toast.classList.remove('on')">✕</button></div>
+  <div class="bd" id="toastBd"></div>
+  <div class="ft"><button class="btn desk" id="toastFolder">Open folder</button><button class="btn def desk" id="toastOpen">Open</button></div></div>
 
 <script>
+'use strict';
+// ---------- helpers ----------
 const H = { 'x-downloaderx': '1', 'content-type': 'application/json' };
 const api = (p, method = 'GET', body) =>
   fetch('/api' + p, { method, headers: H, body: body && JSON.stringify(body) }).then(async r => {
-    const t = await r.text(); let j; try { j = JSON.parse(t) } catch { j = t }
-    if (!r.ok) throw new Error(j.error || j || r.status); return j;
+    const t = await r.text(); let j; try { j = JSON.parse(t); } catch { j = t; }
+    if (!r.ok) throw new Error((j && j.error) || j || 'error ' + r.status); return j;
   });
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const size = b => { if (!b) return '—'; const u = ['B','KB','MB','GB','TB']; let i = 0; while (b >= 1024 && i < 4) { b /= 1024; i++ } return b.toFixed(i ? 1 : 0) + ' ' + u[i]; };
-const dur = s => !isFinite(s) || s <= 0 ? '—' : s < 60 ? Math.round(s) + 's' : s < 3600 ? Math.floor(s/60) + 'm ' + Math.round(s%60) + 's' : Math.floor(s/3600) + 'h ' + Math.floor(s%3600/60) + 'm';
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = { get(k, d) { try { const v = localStorage.getItem('dx.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('dx.' + k, JSON.stringify(v)); } catch {} } };
 
-let items = [], sel = null, filter = 'All';
-const CATS = ['Video', 'Music', 'Documents', 'Compressed', 'Programs', 'Images', 'General'];
-const STATES = { Running: 'running', Queued: 'queued', Paused: 'paused', Finished: 'done', Failed: 'failed' };
+// Desktop window only: the native side handles these (open files, exit, autostart).
+// wry's `window.ipc` is read-only, so the helper below is named `native`.
+const BRIDGE = window.ipc;
+const DESKTOP = !!(BRIDGE && BRIDGE.postMessage);
+let ipcSeq = 0; const ipcWait = {};
+window.__ipcReply = (cb, v) => { const f = ipcWait[cb]; delete ipcWait[cb]; f && f(v); };
+function native(cmd, args = {}) {
+  return new Promise(res => {
+    if (!DESKTOP) return res(null);
+    const cb = ++ipcSeq; ipcWait[cb] = res;
+    BRIDGE.postMessage(JSON.stringify({ cb, cmd, ...args }));
+    setTimeout(() => { if (ipcWait[cb]) { delete ipcWait[cb]; res(null); } }, 8000);
+  });
+}
 
-function render() {
-  const count = f => items.filter(f).length;
-  const link = (name, f) => `<a class="${filter === name ? 'on' : ''}" onclick="filter='${name}';render()">${name}<span>${count(f)}</span></a>`;
-  $('nav').innerHTML = link('All', () => true) + '<h4>Status</h4>' +
-    Object.entries(STATES).map(([n, s]) => link(n, i => i.status === s)).join('') + '<h4>Category</h4>' +
-    CATS.map(c => link(c, i => i.category === c)).join('');
-  const show = items.filter(i => filter === 'All' || i.category === filter || i.status === STATES[filter])
-    .sort((a, b) => b.id - a.id);
-  $('rows').innerHTML = show.length ? show.map(i => {
-    const pct = i.total ? Math.min(100, i.downloaded / i.total * 100) : (i.status === 'done' ? 100 : 0);
-    const left = i.speed ? (i.total - i.downloaded) / i.speed : NaN;
-    return `<tr class="${i.id === sel ? 'sel' : ''}" onclick="sel=${i.id};render()" ondblclick="sel=${i.id};act(['running','queued'].includes('${i.status}')?'pause':'resume')">
-      <td class="name" title="${esc(i.name || i.url)}">${esc(i.name || i.url)}</td>
-      <td>${size(i.total)}</td>
-      <td><div class="bar"><i style="left:0;width:${pct}%"></i></div> ${pct.toFixed(0)}%</td>
-      <td class="hide-sm">${i.status === 'running' ? size(i.speed) + '/s' : ''}</td>
-      <td class="hide-sm">${i.status === 'running' ? dur(left) : ''}</td>
-      <td><span class="pill ${i.status}">${i.status}${i.verified === true ? ' ✓' : i.verified === false ? ' ✗ hash' : ''}</span></td></tr>`;
-  }).join('') : `<tr><td colspan="6" class="empty">No downloads here. Click “+ Add URL” or use the browser extension.</td></tr>`;
+function size(b) {
+  if (!b) return '';
+  if (b < 1024) return b + ' Bytes';
+  const u = ['KB', 'MB', 'GB', 'TB']; let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < 3);
+  return b.toFixed(2) + '  ' + u[i];
+}
+const rate = b => b ? size(b).replace('  ', ' ') + '/sec' : '';
+function left(s) {
+  if (!isFinite(s) || s <= 0) return '';
+  s = Math.round(s);
+  if (s < 60) return s + ' sec';
+  if (s < 3600) return Math.floor(s / 60) + ' min ' + (s % 60) + ' sec';
+  if (s < 86400) return Math.floor(s / 3600) + ' hour ' + Math.floor(s % 3600 / 60) + ' min';
+  return Math.floor(s / 86400) + ' day ' + Math.floor(s % 86400 / 3600) + ' hour';
+}
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const p2 = n => String(n).padStart(2, '0');
+function date(t) {
+  if (!t) return '';
+  const d = new Date(t * 1000);
+  return `${MON[d.getMonth()]} ${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())} ${d.getFullYear()}`;
+}
+const toLocalInput = t => { const d = new Date(t * 1000); return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`; };
 
-  const it = items.find(i => i.id === sel);
-  for (const [b, ok] of [['bResume', ['paused', 'failed']], ['bPause', ['running', 'queued']], ['bRetry', ['failed']], ['bUp', null], ['bDown', null], ['bDel', null]])
-    $(b).disabled = !it || (ok && !ok.includes(it.status));
-  const d = $('detail');
-  if (!it) { d.style.display = 'none'; } else {
-    d.style.display = 'block';
-    const segs = it.total && it.segments.length ? it.segments.map(([s, e, p]) =>
-      `<i style="left:${s / it.total * 100}%;width:${(p - s) / it.total * 100}%"></i>`).join('')
-      : `<i style="left:0;width:${it.total ? it.downloaded / it.total * 100 : 0}%"></i>`;
-    d.innerHTML = `<b>${esc(it.name || 'Untitled')}</b>
-      <div class="segs" title="Each block is a connection's progress">${segs}</div>
-      <div class="kv">
-        <b>Downloaded</b><span>${size(it.downloaded)} of ${size(it.total)}</span>
-        <b>Connections</b><span>${it.segments.filter(s => s[2] < s[1]).length || '—'} active / ${it.segments.length || '—'} parts</span>
-        <b>Type</b><span>${it.kind.type}${it.kind.format ? ' · ' + esc(it.kind.format) : ''}</span>
-        <b>Priority</b><span>${it.priority}</span>
-        ${it.start_after ? `<b>Starts</b><span>${new Date(it.start_after * 1000).toLocaleString()}</span>` : ''}
-        <b>Saved to</b><code>${esc(it.path || '—')}</code>
-        <b>URL</b><code>${esc(it.url)}</code>
-        ${it.sha256 ? `<b>SHA-256</b><code>${esc(it.sha256)} ${it.verified === true ? '✓ matches' : it.verified === false ? '✗ does not match' : ''}</code>` : ''}
-        ${it.error ? `<b>Error</b><span style="color:var(--bad)">${esc(it.error)}</span>` : ''}
-      </div>`;
+// ---------- icons ----------
+const I = {
+  app: '<svg viewBox="0 0 16 16"><rect x=".5" y=".5" width="15" height="15" rx="3.5" fill="#3a74ea"/><path d="M6.6 3h2.8v5h2.4L8 12 4.2 8h2.4z" fill="#fff"/><rect x="4" y="12.6" width="8" height="1.3" rx=".4" fill="#fff"/></svg>',
+  add: '<svg viewBox="0 0 24 24"><path d="M9.5 2.5h5v7h7v5h-7v7h-5v-7h-7v-5h7z" fill="#dcf5e2" stroke="#1f9d55"/></svg>',
+  resume: '<svg viewBox="0 0 24 24" stroke="#2f6fed"><circle cx="12" cy="12" r="9.5" fill="#eaf1fe"/><path d="M12 7v9.5M8 12.5l4 4 4-4"/></svg>',
+  stop: '<svg viewBox="0 0 24 24" stroke="#d1242f"><circle cx="12" cy="12" r="9.5" fill="#fdecec"/><rect x="8.5" y="8.5" width="7" height="7" rx="1"/></svg>',
+  stopall: '<svg viewBox="0 0 24 24" stroke="#d1242f"><path d="M18 11V6a2 2 0 0 0-4 0v5M14 10V4a2 2 0 0 0-4 0v6M10 10.5V6a2 2 0 0 0-4 0v8" fill="#fdecec"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-6-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
+  delete: '<svg viewBox="0 0 24 24" stroke="#57606a"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" fill="#f0f1f3"/><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>',
+  delcomplete: '<svg viewBox="0 0 24 24" stroke="#bf3989"><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" fill="#fbeaf3"/><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M9 14l2 2 4-4"/></svg>',
+  options: '<svg viewBox="0 0 24 24" stroke="#6f42c1"><circle cx="12" cy="12" r="3" fill="#f1ebfb"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  scheduler: '<svg viewBox="0 0 24 24" stroke="#8250df"><circle cx="12" cy="13" r="8" fill="#f3edfc"/><path d="M12 9v4l2.5 2M5 3 2 6M22 6l-3-3M6.4 19.6 4 22M17.6 19.6 20 22"/></svg>',
+  startq: '<svg viewBox="0 0 24 24" stroke="#2f6fed"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#eaf1fe"/><path d="M14 2v6h6M12 11v6.5M9 14.5l3 3 3-3"/></svg>',
+  stopq: '<svg viewBox="0 0 24 24" stroke="#d1242f"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="#fdecec"/><path d="M14 2v6h6"/><rect x="9.5" y="12" width="5" height="5" rx=".8"/></svg>',
+  browser: '<svg viewBox="0 0 24 24" stroke="#0969da"><circle cx="12" cy="12" r="10" fill="#e8f2fd"/><circle cx="12" cy="12" r="4" fill="#fff"/><path d="M21.17 8H12M3.95 6.06 8.54 14M10.88 21.94 15.46 14"/></svg>',
+  // tree
+  folder: '<svg viewBox="0 0 16 16"><path d="M1.5 3h4.6l1.5 1.6h6.9v8.9h-13z" fill="#ffd45e" stroke="#c99a1c"/><path d="M1.5 6h13" stroke="#e8b730"/></svg>',
+  folderOpen: '<svg viewBox="0 0 16 16"><path d="M1.5 3h4.6l1.5 1.6h5.9v2H1.5z" fill="#f6c443" stroke="#c99a1c"/><path d="M1.5 13.5 3 6.6h12.2l-1.6 6.9z" fill="#ffd96b" stroke="#c99a1c"/></svg>',
+  unfinished: '<svg viewBox="0 0 16 16"><path d="M1.5 3h4.6l1.5 1.6h6.9v8.9h-13z" fill="#ffd45e" stroke="#c99a1c"/><path d="M10.5 6.5v5M8.3 9.3l2.2 2.2 2.2-2.2" stroke="#2f6fed" stroke-width="1.6" fill="none"/></svg>',
+  finished: '<svg viewBox="0 0 16 16"><path d="M1.5 3h4.6l1.5 1.6h6.9v8.9h-13z" fill="#ffd45e" stroke="#c99a1c"/><path d="M7.5 9.5l2 2 4-4.5" stroke="#1f9d55" stroke-width="1.8" fill="none"/></svg>',
+  queues: '<svg viewBox="0 0 16 16"><path d="M1.5 3h4.6l1.5 1.6h6.9v8.9h-13z" fill="#ffd45e" stroke="#c99a1c"/><circle cx="10.5" cy="9.5" r="3.2" fill="#fff" stroke="#8250df"/><path d="M10.5 8v1.6l1 .8" stroke="#8250df" fill="none"/></svg>',
+  queue: '<svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="3" rx=".8" fill="#e9e1fb" stroke="#8250df"/><rect x="2" y="6.5" width="12" height="3" rx=".8" fill="#e9e1fb" stroke="#8250df"/><rect x="2" y="10.5" width="12" height="3" rx=".8" fill="#e9e1fb" stroke="#8250df"/></svg>',
+  Compressed: '<svg viewBox="0 0 16 16"><rect x="2.5" y="1.5" width="11" height="13" rx="1" fill="#fff3c4" stroke="#c99a06"/><path d="M8 1.5v1.5h1v1.5H8V6h1v1.5H8V9" stroke="#8a6a04" fill="none"/><rect x="7" y="9" width="2.2" height="2.4" fill="#c99a06"/></svg>',
+  Documents: '<svg viewBox="0 0 16 16"><path d="M3 1.5h6.5l3.5 3.5v9.5H3z" fill="#fff" stroke="#7d8590"/><path d="M9.5 1.5V5H13M5 8h6M5 10h6M5 12h4" stroke="#7d8590" fill="none"/></svg>',
+  Music: '<svg viewBox="0 0 16 16"><path d="M6 12.2V3.3l7.5-1.6v8.8" stroke="#2f6fed" stroke-width="1.3" fill="none"/><circle cx="4.3" cy="12.3" r="2" fill="#2f6fed"/><circle cx="11.8" cy="10.6" r="2" fill="#2f6fed"/></svg>',
+  Programs: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="#fff" stroke="#57606a"/><rect x="2" y="3" width="12" height="2.3" fill="#3a74ea"/><path d="M4 8h5M4 10.5h7" stroke="#9aa3ad"/></svg>',
+  Video: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="#46566a"/><path d="M3.3 3.2v9.6M12.7 3.2v9.6" stroke="#fff" stroke-dasharray="1.2 1.2"/><path d="M6.6 6v4l3.4-2z" fill="#fff"/></svg>',
+  Images: '<svg viewBox="0 0 16 16"><rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="#e6f4ea" stroke="#1f9d55"/><path d="M2 12.5l4-4.2 3 3 2-2 3 3" stroke="#1f9d55" fill="none"/><circle cx="11" cy="5.6" r="1.3" fill="#d4a017"/></svg>',
+  General: '<svg viewBox="0 0 16 16"><path d="M3 1.5h6.5l3.5 3.5v9.5H3z" fill="#fff" stroke="#7d8590"/><path d="M9.5 1.5V5H13" stroke="#7d8590" fill="none"/></svg>',
+};
+document.querySelectorAll('[data-icon]').forEach(e => e.innerHTML = I[e.dataset.icon]);
+const genericIcon = '<span class="gi">' + I.General + '</span>';
+
+// Real Windows file icons, fetched once per type (or per finished file) and cached.
+const iconCache = {};
+// Programs carry their own icon (like IDM shows each installer's logo); other files share one per type.
+const OWN_ICON = /^(exe|msi|ico|lnk|appx|msix)$/;
+function iconKey(it) {
+  const ext = extOf(it);
+  if (it.status === 'done' && it.path && OWN_ICON.test(ext)) return 'id:' + it.id;
+  return 'ext:' + ext;
+}
+function extOf(it) {
+  const n = it.name || '';
+  const m = /\.([a-z0-9]{1,8})$/i.exec(n);
+  if (m) return m[1].toLowerCase();
+  if (it.kind.type === 'hls') return 'mp4';
+  if (it.kind.type === 'ytdlp') return it.category === 'Music' ? 'm4a' : 'mp4';
+  return 'bin';
+}
+function iconHtml(it, cls = '') {
+  const k = iconKey(it), v = iconCache[k];
+  if (v && v !== 'wait' && v !== 'none') return `<img class="${cls}" src="${v}" alt="">`;
+  if (!v) {
+    iconCache[k] = 'wait';
+    const q = k.startsWith('id:') ? 'id=' + it.id : 'ext=' + k.slice(4);
+    fetch('/api/icon?' + q, { headers: H }).then(r => r.ok ? r.blob() : Promise.reject())
+      .then(b => { iconCache[k] = URL.createObjectURL(b); renderRows(); }, () => { iconCache[k] = 'none'; });
   }
-  const run = items.filter(i => i.status === 'running');
-  $('stat').textContent = `${run.length} active · ${size(run.reduce((a, i) => a + i.speed, 0))}/s`;
+  return genericIcon;
 }
 
-async function poll() {
-  try { items = await api('/items'); render(); } catch { $('stat').textContent = 'disconnected'; }
-}
-setInterval(poll, 1000); poll();
+// ---------- state ----------
+let items = [], appStatus = {}, settings = null;
+let selected = new Set(), anchor = null;
+let view = store.get('view', 'all:');
+let expanded = store.get('expanded', { all: true, unfinished: false, finished: false, queues: true });
+let sort = store.get('sort', { key: 'added', dir: -1 });
+const CATS = ['Compressed', 'Documents', 'Music', 'Programs', 'Video', 'Images'];
+const COLS = [
+  { k: 'name', t: 'File Name', w: 330 },
+  { k: 'q', t: 'Q', w: 34 },
+  { k: 'size', t: 'Size', w: 92, num: true },
+  { k: 'status', t: 'Status', w: 120 },
+  { k: 'left', t: 'Time left', w: 100 },
+  { k: 'rate', t: 'Transfer rate', w: 100 },
+  { k: 'added', t: 'Last Try Date', w: 150 },
+  { k: 'desc', t: 'Description', w: 260 },
+];
+const widths = store.get('widths', {});
 
-const act = a => sel && api(`/items/${sel}/${a}`, 'POST').then(poll);
-function removeSel() {
-  const it = items.find(i => i.id === sel); if (!it) return;
-  const files = it.status === 'done' && confirm('Also delete the downloaded file from disk?\nOK = delete file, Cancel = keep file');
-  api(`/items/${sel}/${files ? 'delete' : 'remove'}`, 'POST').then(() => { sel = null; poll(); });
+const isUnfinished = i => i.status !== 'done';
+const inQueue = i => i.status === 'queued' || i.status === 'running';
+const nameOf = i => i.name || decodeURIComponent((i.url.split(/[?#]/)[0].split('/').pop()) || i.url);
+const pct = i => i.total ? Math.min(100, i.downloaded / i.total * 100) : (i.status === 'done' ? 100 : 0);
+const timeLeft = i => i.status === 'running' && i.speed && i.total ? (i.total - i.downloaded) / i.speed : NaN;
+function statusText(i) {
+  switch (i.status) {
+    case 'done': return 'Complete' + (i.verified === true ? ' (SHA-256 OK)' : i.verified === false ? ' (SHA-256 mismatch!)' : '');
+    case 'running': return i.total ? pct(i).toFixed(2) + '%' : (i.downloaded ? 'Receiving data…' : 'Connecting…');
+    case 'paused': return i.downloaded && i.total ? pct(i).toFixed(2) + '%' : 'Stopped';
+    case 'queued': return i.start_after && i.start_after * 1000 > Date.now() ? 'Scheduled ' + new Date(i.start_after * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Queued';
+    case 'failed': return 'Error';
+  }
+  return i.status;
+}
+function descOf(i) {
+  if (i.description) return i.description;
+  if (i.kind.type === 'ytdlp') return 'Video page · ' + host(i.url);
+  if (i.kind.type === 'hls') return 'Stream (HLS) · ' + host(i.url);
+  return host(i.url);
+}
+const host = u => { try { return new URL(u).host; } catch { return ''; } };
+
+function viewFilter() {
+  const [g, c] = view.split(':');
+  const base = g === 'unfinished' ? isUnfinished : g === 'finished' ? (i => i.status === 'done') : g === 'queue' ? inQueue : (() => true);
+  return i => base(i) && (!c || i.category === c);
 }
 
-let choices = [];
-function openAdd(url = '') {
-  $('aUrl').value = url; $('aName').value = ''; $('aSha').value = ''; $('aAt').value = '';
-  $('aChoices').innerHTML = ''; $('aErr').textContent = ''; choices = [];
-  add.showModal(); if (url) check();
+// ---------- tree ----------
+function renderTree() {
+  const cnt = f => items.filter(f).length;
+  const node = (key, label, icon, depth, opts = {}) => {
+    const n = opts.count ?? null;
+    const exp = opts.group ? `<span class="exp" data-exp="${opts.group}">${expanded[opts.group] ? '−' : '+'}</span>` : '<span class="exp none"></span>';
+    return `<li><div class="node ${view === key ? 'on' : ''}" data-view="${key}" style="padding-left:${4 + depth * 16}px">${exp}${icon}<span class="lbl">${esc(label)}</span>${n ? `<span class="cnt">(${n})</span>` : ''}</div>`;
+  };
+  const group = (g, label, icon, filt) => {
+    let h = node(g + ':', label, expanded[g] && g === 'all' ? I.folderOpen : icon, 0, { group: g, count: g === 'all' ? null : cnt(filt) });
+    if (expanded[g]) h += '<ul>' + CATS.map(c => node(`${g}:${c}`, c, I[c], 1, { count: null })).join('') + '</ul>';
+    return h + '</li>';
+  };
+  $('tree').innerHTML =
+    group('all', 'All Downloads', I.folder, () => true) +
+    group('unfinished', 'Unfinished', I.unfinished, isUnfinished) +
+    group('finished', 'Finished', I.finished, i => i.status === 'done') +
+    node('queues:', 'Queues', I.queues, 0, { group: 'queues' }) +
+    (expanded.queues ? '<ul>' + node('queue:', 'Main download queue', I.queue, 1, { count: cnt(inQueue) }) + '</li></ul>' : '') + '</li>';
 }
-async function check() {
-  $('aErr').textContent = ''; $('aChoices').innerHTML = 'Checking…';
-  try {
-    const r = await api('/probe', 'POST', { url: $('aUrl').value.trim() });
-    choices = r.choices;
-    if (r.title && !$('aName').value && r.choices[0]?.kind.type !== 'direct') $('aName').value = r.title;
-    $('aChoices').innerHTML = choices.map((c, i) =>
-      `<label><input type="radio" name="q" value="${i}" ${i ? '' : 'checked'}> ${esc(c.label)} <span style="margin-left:auto;color:var(--muted)">${c.size ? size(c.size) : ''}</span></label>`).join('');
-  } catch (e) { $('aChoices').innerHTML = ''; $('aErr').textContent = e.message; }
-}
-async function submitAdd(paused) {
-  const url = $('aUrl').value.trim(); if (!url) return;
-  const q = document.querySelector('input[name=q]:checked');
-  const c = q ? choices[q.value] : { url, kind: { type: 'direct' } };
-  const at = $('aAt').value ? Math.floor(new Date($('aAt').value) / 1000) : null;
-  try {
-    await api('/add', 'POST', { url: c.url, kind: c.kind, name: $('aName').value || null, priority: +$('aPri').value,
-      start_after: at, sha256: $('aSha').value || null, paused });
-    add.close(); poll();
-  } catch (e) { $('aErr').textContent = e.message; }
-}
-
-async function openSettings() {
-  const s = await api('/settings');
-  $('sMax').value = s.max_active; $('sConn').value = s.connections; $('sLimit').value = s.speed_limit;
-  $('sDir').value = s.download_dir; $('sCat').checked = s.categorize; settings.showModal();
-}
-async function saveSettings() {
-  await api('/settings', 'POST', { max_active: +$('sMax').value || 3, connections: +$('sConn').value || 8,
-    speed_limit: +$('sLimit').value || 0, download_dir: $('sDir').value, categorize: $('sCat').checked });
-  settings.close();
-}
-// Paste a link anywhere to add it.
-document.addEventListener('paste', e => {
-  if (document.querySelector('dialog[open]')) return;
-  const t = e.clipboardData.getData('text').trim(); if (/^https?:\/\//.test(t)) openAdd(t);
+$('tree').addEventListener('click', e => {
+  const ex = e.target.closest('[data-exp]');
+  if (ex) { expanded[ex.dataset.exp] = !expanded[ex.dataset.exp]; store.set('expanded', expanded); return renderTree(); }
+  const n = e.target.closest('[data-view]');
+  if (n) { view = n.dataset.view === 'queues:' ? 'queue:' : n.dataset.view; store.set('view', view); selected.clear(); render(); }
 });
+$('tree').addEventListener('dblclick', e => {
+  const n = e.target.closest('[data-view]'); if (!n) return;
+  const g = n.dataset.view.split(':')[0];
+  if (n.dataset.view.endsWith(':') && g in expanded) { expanded[g] = !expanded[g]; store.set('expanded', expanded); renderTree(); }
+});
+
+// ---------- list ----------
+function renderHead() {
+  $('cols').innerHTML = COLS.map(c => `<col style="width:${widths[c.k] || c.w}px">`).join('');
+  $('head').innerHTML = COLS.map((c, n) => `<th data-k="${c.k}" class="${sort.key === c.k ? 'sorted ' + (sort.dir > 0 ? 'asc' : 'desc') : ''}" title="${esc(c.t)}">${esc(c.t)}<span class="rz" data-n="${n}"></span></th>`).join('');
+  const total = COLS.reduce((a, c) => a + (widths[c.k] || c.w), 0);
+  $('list').style.width = total + 'px';
+}
+const sortVal = {
+  name: i => nameOf(i).toLowerCase(), q: i => inQueue(i) ? 0 : 1, size: i => i.total || 0,
+  status: i => ['running', 'queued', 'paused', 'failed', 'done'].indexOf(i.status) * 1000 + (100 - pct(i)),
+  left: i => timeLeft(i) || Infinity, rate: i => i.status === 'running' ? i.speed : -1,
+  added: i => i.last_try || i.added, desc: i => descOf(i).toLowerCase(),
+};
+function shown() {
+  const f = viewFilter(), v = sortVal[sort.key] || sortVal.added;
+  return items.filter(f).sort((a, b) => { const x = v(a), y = v(b); return (x < y ? -1 : x > y ? 1 : b.id - a.id) * sort.dir; });
+}
+let shownCache = [];
+function renderRows() {
+  shownCache = shown();
+  $('rows').innerHTML = shownCache.map(i => {
+    const st = statusText(i);
+    const cls = i.status === 'failed' || i.verified === false ? 'st-err' : i.status === 'running' ? 'st-run' : '';
+    const bar = (i.status === 'running' || i.status === 'paused') && i.total ? `<span class="mini"><i style="width:${pct(i)}%"></i></span>` : '';
+    return `<tr data-id="${i.id}" class="${selected.has(i.id) ? 'sel' : ''}">
+      <td class="name" title="${esc(nameOf(i))}">${iconHtml(i)}<span>${esc(nameOf(i))}</span></td>
+      <td>${inQueue(i) ? `<span class="gi" title="Main download queue" style="display:inline-block;width:14px;height:14px">${I.queue}</span>` : ''}</td>
+      <td class="num">${size(i.total)}</td>
+      <td class="${cls}" title="${esc(i.error || st)}">${bar}${esc(st)}</td>
+      <td>${left(timeLeft(i))}</td>
+      <td>${i.status === 'running' ? rate(i.speed) : ''}</td>
+      <td>${date(i.last_try || i.added)}</td>
+      <td title="${esc(descOf(i))}">${esc(descOf(i))}</td></tr>`;
+  }).join('');
+  const empty = $('empty');
+  if (shownCache.length) empty.style.display = 'none';
+  else {
+    empty.style.display = 'block';
+    empty.innerHTML = items.length ? 'No downloads in this category.'
+      : `<b>No downloads yet.</b><br>Click <b>Add URL</b>, paste a link with <b>Ctrl+V</b>, or use the browser extension.`;
+  }
+}
+function render() { renderTree(); renderRows(); renderTools(); renderStatus(); renderProgress(); }
+
+$('head').addEventListener('click', e => {
+  if (e.target.classList.contains('rz')) return;
+  const th = e.target.closest('th'); if (!th) return;
+  sort = sort.key === th.dataset.k ? { key: sort.key, dir: -sort.dir } : { key: th.dataset.k, dir: th.dataset.k === 'added' ? -1 : 1 };
+  store.set('sort', sort); renderHead(); renderRows();
+});
+// Column resizing.
+$('head').addEventListener('mousedown', e => {
+  if (!e.target.classList.contains('rz')) return;
+  e.preventDefault();
+  const c = COLS[+e.target.dataset.n], x0 = e.clientX, w0 = widths[c.k] || c.w;
+  const move = ev => { widths[c.k] = Math.max(30, w0 + ev.clientX - x0); renderHead(); };
+  const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); store.set('widths', widths); };
+  addEventListener('mousemove', move); addEventListener('mouseup', up);
+});
+
+// Selection: click, Ctrl+click, Shift+click.
+const rowId = e => { const tr = e.target.closest('tr[data-id]'); return tr ? +tr.dataset.id : null; };
+$('rows').addEventListener('mousedown', e => {
+  const id = rowId(e); if (id == null) return;
+  if (e.button === 2 && selected.has(id)) return;
+  if (e.shiftKey && anchor != null) {
+    const ids = shownCache.map(i => i.id), a = ids.indexOf(anchor), b = ids.indexOf(id);
+    if (!e.ctrlKey) selected.clear();
+    ids.slice(Math.min(a, b), Math.max(a, b) + 1).forEach(x => selected.add(x));
+  } else if (e.ctrlKey) {
+    selected.has(id) ? selected.delete(id) : selected.add(id); anchor = id;
+  } else { selected = new Set([id]); anchor = id; }
+  renderRows(); renderTools();
+});
+$('listwrap').addEventListener('mousedown', e => {
+  if (!e.target.closest('tr') && e.button === 0) { selected.clear(); renderRows(); renderTools(); }
+});
+$('rows').addEventListener('dblclick', e => { const id = rowId(e); if (id != null) openItem(id); });
+$('listwrap').addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (rowId(e) == null && !e.target.closest('tr')) { selected.clear(); renderRows(); renderTools(); }
+  showMenu(rowMenu(), e.clientX, e.clientY);
+});
+
+// ---------- selection-based actions ----------
+const sel = () => items.filter(i => selected.has(i.id));
+const canResume = () => sel().some(i => i.status === 'paused' || i.status === 'failed');
+const canStop = () => sel().some(i => i.status === 'running' || i.status === 'queued');
+async function each(action, list = sel()) { await Promise.all(list.map(i => api(`/items/${i.id}/${action}`, 'POST').catch(() => {}))); poll(); }
+function openItem(id) {
+  const it = items.find(i => i.id === id); if (!it) return;
+  if (it.status === 'done' && DESKTOP) native('open', { id });
+  else showProgress(id);
+}
+function copyAddress() { const s = sel(); if (s.length) navigator.clipboard?.writeText(s.map(i => i.url).join('\n')).catch(() => {}); }
+
+// ---------- toolbar ----------
+const TOOLS = [
+  { k: 'add', t: 'Add URL', fn: () => openAdd() },
+  { k: 'resume', t: 'Resume', fn: () => each('resume'), on: canResume },
+  { k: 'stop', t: 'Stop', fn: () => each('pause'), on: canStop },
+  { k: 'stopall', t: 'Stop All', fn: () => api('/all/pause', 'POST').then(poll), on: () => items.some(inQueue) },
+  { k: 'delete', t: 'Delete', fn: () => askDelete(), on: () => selected.size > 0 },
+  { k: 'delcomplete', t: 'Delete Completed', fn: () => askDeleteCompleted(), on: () => items.some(i => i.status === 'done') },
+  { sep: true },
+  { k: 'options', t: 'Options', fn: () => openOptions() },
+  { k: 'scheduler', t: 'Scheduler', fn: () => openScheduler() },
+  { k: 'startq', t: 'Start Queue', fn: () => api('/all/resume', 'POST').then(poll), on: () => items.some(i => i.status === 'paused' || i.status === 'failed') },
+  { k: 'stopq', t: 'Stop Queue', fn: () => api('/all/stop_queue', 'POST').then(poll), on: () => items.some(i => i.status === 'queued') },
+  { sep: true },
+  { k: 'browser', t: 'Browser', fn: () => openOptions('browser') },
+];
+$('toolbar').innerHTML = TOOLS.map((b, n) => b.sep ? '<div class="tb-sep"></div>' : `<button class="tb" data-n="${n}" title="${esc(b.t)}">${I[b.k]}<span>${esc(b.t)}</span></button>`).join('');
+$('toolbar').addEventListener('click', e => { const b = e.target.closest('.tb'); if (b && !b.disabled) TOOLS[b.dataset.n].fn(); });
+function renderTools() {
+  document.querySelectorAll('.tb').forEach(b => { const t = TOOLS[b.dataset.n]; b.disabled = t.on ? !t.on() : false; });
+}
+
+// ---------- status bar ----------
+function renderStatus() {
+  const run = items.filter(i => i.status === 'running');
+  const sp = run.reduce((a, i) => a + i.speed, 0);
+  $('sb1').textContent = run.length ? `Downloading ${run.length} file${run.length > 1 ? 's' : ''} · ${rate(sp) || '0 KB/sec'}` : `${items.length} download${items.length === 1 ? '' : 's'} · ${items.filter(i => i.status === 'queued').length} waiting`;
+  $('sb2').textContent = settings ? (settings.speed_limit ? `Speed limit: ${settings.speed_limit} KB/sec` : 'Speed limit: off') : '';
+  $('sb3').innerHTML = appStatus.ok ? `yt-dlp <span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? '✓' : '✗'}</span> · ffmpeg <span class="${appStatus.ffmpeg ? 'ok' : 'no'}">${appStatus.ffmpeg ? '✓' : '✗'}</span>` : '<span class="no">Not connected</span>';
+}
+
+// ---------- menus ----------
+const pop = $('pop');
+let menuOwner = null;
+function showMenu(entries, x, y, owner = null) {
+  pop.innerHTML = entries.map((m, n) => m === '-' ? '<hr>' : m.hide ? '' :
+    `<div class="it ${m.dis ? 'dis' : ''}" data-n="${n}"><span class="ck">${m.ck ? '✓' : ''}</span>${esc(m.t)}${m.key ? `<span class="k">${m.key}</span>` : ''}</div>`).join('');
+  pop._entries = entries;
+  pop.style.display = 'block';
+  const r = pop.getBoundingClientRect();
+  pop.style.left = Math.min(x, innerWidth - r.width - 4) + 'px';
+  pop.style.top = Math.min(y, innerHeight - r.height - 4) + 'px';
+  document.querySelectorAll('.menubar > div').forEach(d => d.classList.toggle('open', d === owner));
+  menuOwner = owner;
+}
+function hideMenu() { pop.style.display = 'none'; menuOwner = null; document.querySelectorAll('.menubar > div').forEach(d => d.classList.remove('open')); }
+pop.addEventListener('click', e => {
+  const it = e.target.closest('.it'); if (!it || it.classList.contains('dis')) return;
+  const m = pop._entries[it.dataset.n]; hideMenu(); m.fn && m.fn();
+});
+addEventListener('mousedown', e => { if (!pop.contains(e.target) && !e.target.closest('.menubar > div')) hideMenu(); }, true);
+addEventListener('blur', hideMenu);
+
+function rowMenu() {
+  const s = sel(), one = s.length === 1 ? s[0] : null;
+  return [
+    { t: 'Open', key: 'Enter', dis: !one || one.status !== 'done' || !DESKTOP, fn: () => native('open', { id: one.id }) },
+    { t: 'Open folder', dis: !one || !DESKTOP, fn: () => native('folder', { id: one.id }) },
+    { t: 'Show progress', dis: !one || one.status === 'done', fn: () => showProgress(one.id) }, '-',
+    { t: 'Resume', dis: !canResume(), fn: () => each('resume') },
+    { t: 'Stop', dis: !canStop(), fn: () => each('pause') },
+    { t: 'Redownload', dis: !s.some(i => i.status === 'failed'), fn: () => each('retry') },
+    { t: 'Schedule…', dis: !s.length, fn: () => openScheduler(true) }, '-',
+    { t: 'Move up in queue', dis: !s.length, fn: () => each('up') },
+    { t: 'Move down in queue', dis: !s.length, fn: () => each('down') }, '-',
+    { t: 'Copy address', dis: !s.length, fn: copyAddress },
+    { t: 'Delete…', key: 'Del', dis: !s.length, fn: askDelete }, '-',
+    { t: 'Properties', dis: !one, fn: () => showProps(one.id) },
+  ];
+}
+const MENUS = {
+  tasks: () => [
+    { t: 'Add new download…', key: 'Ctrl+N', fn: () => openAdd() },
+    { t: 'Add batch download…', fn: openBatch }, '-',
+    { t: 'Exit', hide: !DESKTOP, fn: () => native('quit') },
+  ],
+  file: () => { const m = rowMenu(); return [m[0], m[1], '-', m[12], m[15]]; },
+  downloads: () => [
+    { t: 'Resume', dis: !canResume(), fn: () => each('resume') },
+    { t: 'Stop', dis: !canStop(), fn: () => each('pause') },
+    { t: 'Stop all', fn: () => api('/all/pause', 'POST').then(poll) },
+    { t: 'Delete…', key: 'Del', dis: !selected.size, fn: askDelete },
+    { t: 'Delete completed…', fn: askDeleteCompleted }, '-',
+    { t: 'Start queue', fn: () => api('/all/resume', 'POST').then(poll) },
+    { t: 'Stop queue', fn: () => api('/all/stop_queue', 'POST').then(poll) },
+    { t: 'Scheduler…', fn: () => openScheduler() }, '-',
+    { t: 'Options…', fn: () => openOptions() },
+  ],
+  view: () => [
+    { t: 'Categories', ck: !$('cats').classList.contains('hidden'), fn: () => toggleCats() },
+    { t: 'Status bar', ck: !$('statusbar').classList.contains('hidden'), fn: () => { $('statusbar').classList.toggle('hidden'); store.set('statusbar', !$('statusbar').classList.contains('hidden')); } }, '-',
+    { t: 'Open dashboard in browser', hide: !DESKTOP, fn: () => native('url', { url: location.origin + '/' }) },
+    { t: 'Hide to tray', hide: !DESKTOP, fn: () => native('hide') },
+  ],
+  help: () => [
+    { t: 'Browser extension…', fn: () => openOptions('browser') },
+    { t: 'yt-dlp on GitHub', hide: !DESKTOP, fn: () => native('url', { url: 'https://github.com/yt-dlp/yt-dlp#installation' }) }, '-',
+    { t: 'About DownloaderX', fn: openAbout },
+  ],
+};
+$('menubar').addEventListener('mousedown', e => {
+  const d = e.target.closest('[data-m]'); if (!d) return;
+  if (menuOwner === d) return hideMenu();
+  const r = d.getBoundingClientRect(); showMenu(MENUS[d.dataset.m](), r.left, r.bottom, d);
+});
+$('menubar').addEventListener('mouseover', e => {
+  const d = e.target.closest('[data-m]');
+  if (d && menuOwner && menuOwner !== d) { const r = d.getBoundingClientRect(); showMenu(MENUS[d.dataset.m](), r.left, r.bottom, d); }
+});
+
+// ---------- category panel ----------
+function toggleCats(on) {
+  const c = $('cats'); on = on ?? c.classList.contains('hidden');
+  c.classList.toggle('hidden', !on); $('split').classList.toggle('hidden', !on); store.set('cats', on);
+}
+toggleCats(store.get('cats', true));
+if (!store.get('statusbar', true)) $('statusbar').classList.add('hidden');
+$('cats').style.width = store.get('catsW', 200) + 'px';
+$('split').addEventListener('mousedown', e => {
+  e.preventDefault(); const x0 = e.clientX, w0 = $('cats').offsetWidth;
+  const move = ev => $('cats').style.width = Math.max(120, Math.min(420, w0 + ev.clientX - x0)) + 'px';
+  const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); store.set('catsW', $('cats').offsetWidth); };
+  addEventListener('mousemove', move); addEventListener('mouseup', up);
+});
+
+// ---------- dialogs ----------
+const veil = $('veil');
+let openDlgs = [];
+function dlg(id) {
+  const d = $(id);
+  d.classList.add('on'); veil.classList.add('on');
+  if (!d.dataset.moved) { const r = d.getBoundingClientRect(); d.style.left = Math.max(10, (innerWidth - r.width) / 2) + 'px'; d.style.top = Math.max(10, (innerHeight - r.height) / 2.6) + 'px'; }
+  openDlgs = openDlgs.filter(x => x !== d).concat(d);
+  hideMenu();
+  return d;
+}
+function closeDlg(id) {
+  const d = typeof id === 'string' ? $(id) : id;
+  d.classList.remove('on'); delete d.dataset.moved; openDlgs = openDlgs.filter(x => x !== d);
+  if (!openDlgs.length) veil.classList.remove('on');
+  if (d.id === 'dProg') progId = null;
+}
+document.querySelectorAll('.dlg').forEach(d => {
+  d.addEventListener('click', e => { if (e.target.closest('[data-close]')) closeDlg(d); });
+  // Drag dialogs by their title bar.
+  d.querySelector('.tt').addEventListener('mousedown', e => {
+    if (e.target.closest('button')) return;
+    const r = d.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+    const move = ev => { d.dataset.moved = 1; d.style.left = Math.max(-r.width + 80, Math.min(innerWidth - 80, ev.clientX - dx)) + 'px'; d.style.top = Math.max(0, Math.min(innerHeight - 30, ev.clientY - dy)) + 'px'; };
+    const up = () => { removeEventListener('mousemove', move); removeEventListener('mouseup', up); };
+    addEventListener('mousemove', move); addEventListener('mouseup', up);
+  });
+  d.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { const b = d.querySelector('.btn.def'); if (b && !b.disabled) { e.preventDefault(); b.click(); } }
+  });
+});
+document.querySelectorAll('.desk').forEach(e => { if (!DESKTOP) e.style.display = 'none'; });
+
+// Add URL -> Download File Info
+function openAdd(url = '') {
+  $('aUrl').value = url;
+  dlg('dAdd'); $('aUrl').focus(); $('aUrl').select();
+  if (!url && navigator.clipboard?.readText) navigator.clipboard.readText().then(t => { t = t.trim(); if (/^https?:\/\/\S+$/.test(t) && !$('aUrl').value) { $('aUrl').value = t; $('aUrl').select(); } }).catch(() => {});
+}
+$('aOk').onclick = () => {
+  const u = $('aUrl').value.trim();
+  if (!/^https?:\/\//i.test(u)) { $('aUrl').focus(); return; }
+  closeDlg('dAdd'); openInfo(u);
+};
+let info = null;
+async function openInfo(url) {
+  info = { url, choices: null };
+  $('iUrl').value = url; $('iName').value = ''; $('iDesc').value = ''; $('iSha').value = ''; $('iAt').value = ''; $('iPri').value = '0';
+  $('iCat').innerHTML = ['Auto'].concat(CATS, ['General']).map(c => `<option>${c}</option>`).join('');
+  $('iDir').value = settings ? settings.download_dir : '';
+  $('iQ').innerHTML = ''; $('iQhead').style.display = 'none'; $('iQ').style.display = 'none';
+  $('iMsg').innerHTML = '<span class="spin"></span>Checking the address…';
+  $('iStart').disabled = $('iLater').disabled = true;
+  dlg('dInfo');
+  try {
+    const r = await api('/probe', 'POST', { url });
+    if (info.url !== url) return;
+    info.choices = r.choices; info.title = r.title;
+    const first = r.choices[0];
+    if (first?.kind.type !== 'direct' && r.title) $('iName').value = r.title;
+    if (first?.kind.type === 'direct' && first.label) $('iName').placeholder = first.label;
+    if (r.choices.length > 1 || first?.kind.type !== 'direct') {
+      $('iQhead').style.display = ''; $('iQ').style.display = '';
+      $('iQ').innerHTML = r.choices.map((c, n) => `<label><input type="radio" name="iq" value="${n}" ${n ? '' : 'checked'}>${esc(c.label)}<span>${c.size ? size(c.size) : ''}</span></label>`).join('');
+    }
+    $('iMsg').innerHTML = first?.size ? `File size: <b>${size(first.size)}</b>` : '';
+  } catch (e) {
+    if (info.url !== url) return;
+    info.choices = null;
+    $('iMsg').innerHTML = `<span class="err">${esc(e.message)}</span><br><span class="note">You can still try to download it as a file.</span>`;
+  }
+  $('iStart').disabled = $('iLater').disabled = false;
+  updateInfoDir();
+}
+function updateInfoDir() {
+  if (!settings) return;
+  let cat = $('iCat').value;
+  if (cat === 'Auto') {
+    const c = chosen();
+    cat = c.kind.type === 'hls' ? 'Video' : c.kind.type === 'ytdlp' ? (String(c.kind.format).startsWith('ba') ? 'Music' : 'Video') : guessCat($('iName').value || $('iName').placeholder || info.url);
+  }
+  $('iDir').value = settings.categorize ? settings.download_dir.replace(/[\\/]+$/, '') + '\\' + cat : settings.download_dir;
+}
+const EXT = { Video: 'mp4 mkv webm avi mov m4v ts flv wmv 3gp', Music: 'mp3 m4a aac flac wav ogg opus wma', Compressed: 'zip rar 7z tar gz xz bz2 zst tgz',
+  Programs: 'exe msi dmg pkg deb rpm appimage apk', Documents: 'pdf doc docx xls xlsx ppt pptx txt epub csv odt', Images: 'jpg jpeg png gif webp svg bmp' };
+function guessCat(n) { const e = (/\.([a-z0-9]+)(?:[?#].*)?$/i.exec(n) || [])[1]?.toLowerCase(); for (const [c, l] of Object.entries(EXT)) if (e && l.split(' ').includes(e)) return c; return 'General'; }
+function chosen() {
+  const q = document.querySelector('input[name=iq]:checked');
+  return info.choices ? info.choices[q ? +q.value : 0] : { url: info.url, kind: { type: 'direct' } };
+}
+$('iCat').onchange = updateInfoDir; $('iName').oninput = updateInfoDir; $('iQ').onchange = updateInfoDir;
+async function submitInfo(paused) {
+  const c = chosen();
+  const at = $('iAt').value ? Math.floor(new Date($('iAt').value) / 1000) : null;
+  const name = $('iName').value.trim() || null;
+  const desc = $('iDesc').value.trim() || (c.kind.type !== 'direct' ? c.label : null);
+  try {
+    const r = await api('/add', 'POST', { url: c.url, kind: c.kind, name, description: desc, priority: +$('iPri').value, start_after: at, sha256: $('iSha').value.trim() || null, paused });
+    closeDlg('dInfo'); await poll();
+    selected = new Set([r.id]); anchor = r.id; renderRows(); renderTools();
+    if (!paused && !at) showProgress(r.id);
+  } catch (e) { $('iMsg').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+$('iStart').onclick = () => submitInfo(false);
+$('iLater').onclick = () => submitInfo(true);
+
+// Batch
+function openBatch() { $('bText').value = ''; $('bMsg').textContent = ''; dlg('dBatch'); $('bText').focus(); }
+$('bOk').onclick = async () => {
+  const urls = [...new Set($('bText').value.split(/\s+/).filter(u => /^https?:\/\//i.test(u)))];
+  if (!urls.length) { $('bMsg').innerHTML = '<span class="err">No http(s) links found.</span>'; return; }
+  for (const url of urls) await api('/add', 'POST', { url, paused: $('bPaused').checked }).catch(() => {});
+  closeDlg('dBatch'); poll();
+};
+
+// Delete
+let delList = [];
+function askDelete() {
+  delList = sel(); if (!delList.length) return;
+  $('delMsg').textContent = delList.length === 1 ? `Delete “${nameOf(delList[0])}” from the list?` : `Delete ${delList.length} downloads from the list?`;
+  const anyDone = delList.some(i => i.status === 'done');
+  $('delFilesRow').style.display = anyDone ? '' : 'none'; $('delFiles').checked = false;
+  dlg('dDel');
+}
+$('delOk').onclick = async () => {
+  const files = $('delFiles').checked;
+  closeDlg('dDel');
+  await Promise.all(delList.map(i => api(`/items/${i.id}/${files ? 'delete' : 'remove'}`, 'POST').catch(() => {})));
+  delList.forEach(i => selected.delete(i.id)); poll();
+};
+function askDeleteCompleted() {
+  const n = items.filter(i => i.status === 'done').length; if (!n) return;
+  delList = [];
+  $('delMsg').textContent = `Remove all ${n} completed download${n > 1 ? 's' : ''} from the list? The files stay on disk.`;
+  $('delFilesRow').style.display = 'none';
+  dlg('dDel');
+  $('delOk').onclick = async () => { closeDlg('dDel'); await api('/clear', 'POST'); selected.clear(); poll(); restoreDelOk(); };
+}
+const delOkDefault = $('delOk').onclick;
+function restoreDelOk() { $('delOk').onclick = delOkDefault; }
+$('dDel').addEventListener('click', e => { if (e.target.closest('[data-close]')) restoreDelOk(); });
+
+// Options
+async function openOptions(tab = 'general') {
+  const s = settings || await api('/settings');
+  $('oMax').value = s.max_active;
+  $('oConn').innerHTML = [1, 2, 4, 8, 12, 16, 24, 32].map(n => `<option ${n === s.connections ? 'selected' : ''}>${n}</option>`).join('');
+  if (![...$('oConn').options].some(o => o.selected)) $('oConn').insertAdjacentHTML('beforeend', `<option selected>${s.connections}</option>`);
+  $('oLimOn').checked = s.speed_limit > 0; $('oLim').value = s.speed_limit || 1024; $('oLim').disabled = !s.speed_limit;
+  $('oDir').value = s.download_dir; $('oCat').checked = s.categorize;
+  $('oToast').checked = store.get('toast', true);
+  $('oAuto').checked = !!(await native('autostart'));
+  setTab(tab); dlg('dOpt');
+}
+$('oLimOn').onchange = () => $('oLim').disabled = !$('oLimOn').checked;
+function setTab(t) {
+  document.querySelectorAll('#oTabs div').forEach(d => d.classList.toggle('on', d.dataset.t === t));
+  document.querySelectorAll('#dOpt .tab').forEach(d => d.classList.toggle('on', d.dataset.t === t));
+}
+$('oTabs').addEventListener('click', e => { const t = e.target.closest('[data-t]'); if (t) setTab(t.dataset.t); });
+$('oOk').onclick = async () => {
+  const s = { max_active: Math.max(1, +$('oMax').value || 3), connections: +$('oConn').value || 8,
+    speed_limit: $('oLimOn').checked ? Math.max(1, +$('oLim').value || 0) : 0, download_dir: $('oDir').value.trim() || settings.download_dir, categorize: $('oCat').checked };
+  await api('/settings', 'POST', s);
+  store.set('toast', $('oToast').checked);
+  if (DESKTOP) await native('autostart', { on: $('oAuto').checked });
+  settings = s; closeDlg('dOpt'); render();
+};
+
+// Scheduler
+function openScheduler(selOnly = false) {
+  $('sAt').value = toLocalInput(Date.now() / 1000 + 3600);
+  document.querySelector(`input[name=sWho][value=${selOnly && selected.size ? 'sel' : 'all'}]`).checked = true;
+  $('sSel').disabled = !selected.size;
+  document.querySelector('input[name=sWhen][value=' + (selOnly ? 'at' : 'now') + ']').checked = true;
+  $('sMax').value = settings ? settings.max_active : 3;
+  $('sMsg').textContent = '';
+  dlg('dSched');
+}
+$('sAt').onfocus = () => document.querySelector('input[name=sWhen][value=at]').checked = true;
+$('sOk').onclick = async () => {
+  const when = document.querySelector('input[name=sWhen]:checked').value;
+  const at = when === 'at' && $('sAt').value ? Math.floor(new Date($('sAt').value) / 1000) : null;
+  const who = document.querySelector('input[name=sWho]:checked').value;
+  const ids = (who === 'sel' ? sel() : items).filter(isUnfinished).map(i => i.id);
+  await api('/schedule', 'POST', { ids, at });
+  const max = Math.max(1, +$('sMax').value || 3);
+  if (settings && max !== settings.max_active) { settings = { ...settings, max_active: max }; await api('/settings', 'POST', settings); }
+  $('sMsg').textContent = `${ids.length} download${ids.length === 1 ? '' : 's'} ` + (at ? `will start ${new Date(at * 1000).toLocaleString()}.` : 'queued to start now.');
+  poll();
+};
+$('sStop').onclick = async () => { await api('/all/stop_queue', 'POST'); $('sMsg').textContent = 'Queue stopped. Running downloads continue.'; poll(); };
+
+// Properties
+let propId = null;
+function showProps(id) {
+  const i = items.find(x => x.id === id); if (!i) return; propId = id;
+  const kind = i.kind.type === 'ytdlp' ? 'Video page (yt-dlp)' + (i.kind.format ? ` · ${i.kind.format}` : '') : i.kind.type === 'hls' ? 'HLS stream' : 'File';
+  $('propKv').innerHTML = `
+    <b>File name</b><span>${esc(nameOf(i))}</span>
+    <b>Status</b><span>${esc(statusText(i))}</span>
+    <b>Size</b><span>${size(i.total) || 'unknown'}${i.total ? ` (${i.total.toLocaleString()} bytes)` : ''}</span>
+    <b>Downloaded</b><span>${size(i.downloaded) || '0'}</span>
+    <b>Type</b><span>${esc(kind)}</span>
+    <b>Category</b><span>${esc(i.category)}</span>
+    <b>Saved to</b><code>${esc(i.path || '—')}</code>
+    <b>Address</b><code>${esc(i.url)}</code>
+    <b>Added</b><span>${date(i.added)}</span>
+    <b>Last try</b><span>${date(i.last_try) || '—'}</span>
+    ${i.start_after ? `<b>Starts at</b><span>${new Date(i.start_after * 1000).toLocaleString()}</span>` : ''}
+    <b>Priority</b><span>${i.priority}</span>
+    ${i.description ? `<b>Description</b><span>${esc(i.description)}</span>` : ''}
+    ${i.sha256 ? `<b>SHA-256</b><code>${esc(i.sha256)}${i.verified === true ? ' ✓ matches' : i.verified === false ? ' ✗ does not match' : ''}</code>` : ''}
+    ${i.error ? `<b>Error</b><span class="err">${esc(i.error)}</span>` : ''}`;
+  dlg('dProp');
+}
+$('propCopy').onclick = () => { const i = items.find(x => x.id === propId); if (i) navigator.clipboard?.writeText(i.url).catch(() => {}); };
+
+// Download progress window
+let progId = null;
+function showProgress(id) { progId = id; renderProgress(); dlg('dProg'); }
+function renderProgress() {
+  if (progId == null) return;
+  const i = items.find(x => x.id === progId);
+  if (!i) { closeDlg('dProg'); return; }
+  const p = pct(i);
+  $('pgTitle').textContent = (i.status === 'done' ? 'Download complete' : `${p.toFixed(0)}% `) + ' ' + nameOf(i);
+  const stText = { running: i.downloaded ? 'Receiving data…' : 'Connecting…', queued: statusText(i), paused: 'Paused', done: 'Complete', failed: 'Error' }[i.status];
+  const conns = i.segments.filter(s => s[2] < s[1]).length;
+  $('pgKv').innerHTML = `
+    <b>Address</b><code style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(i.url)}">${esc(i.url)}</code>
+    <b>Status</b><span class="${i.status === 'failed' ? 'err' : ''}">${esc(stText)}${i.error ? ': ' + esc(i.error) : ''}</span>
+    <b>File size</b><span>${size(i.total) || '(unknown)'}</span>
+    <b>Downloaded</b><span>${size(i.downloaded) || '0'}${i.total ? ` ( ${p.toFixed(2)} % )` : ''}</span>
+    <b>Transfer rate</b><span>${i.status === 'running' ? rate(i.speed) || '0 KB/sec' : '—'}</span>
+    <b>Time left</b><span>${left(timeLeft(i)) || '—'}</span>
+    <b>Connections</b><span>${i.kind.type === 'direct' ? (i.status === 'running' ? `${conns || '—'} active` : '—') + (i.segments.length ? ` · ${i.segments.length} parts · resume supported` : '') : i.kind.type === 'hls' ? 'stream segments in parallel' : 'handled by yt-dlp'}</span>
+    <b>Save to</b><code style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(i.path || '')}">${esc(i.path || '—')}</code>`;
+  $('pgBar').style.width = p + '%';
+  $('pgSegs').innerHTML = i.total && i.segments.length ? i.segments.map(([s, e, q]) => `<i style="left:${s / i.total * 100}%;width:${(q - s) / i.total * 100}%"></i>`).join('')
+    : `<i style="left:0;width:${p}%"></i>`;
+  const done = i.status === 'done';
+  $('pgPause').textContent = i.status === 'running' || i.status === 'queued' ? 'Pause' : i.status === 'failed' ? 'Retry' : 'Resume';
+  $('pgPause').style.display = done ? 'none' : '';
+  $('pgOpen').style.display = done && DESKTOP ? '' : 'none';
+  $('pgFolder').style.display = DESKTOP ? '' : 'none';
+}
+$('pgPause').onclick = () => { const i = items.find(x => x.id === progId); if (!i) return;
+  each(i.status === 'running' || i.status === 'queued' ? 'pause' : i.status === 'failed' ? 'retry' : 'resume', [i]); };
+$('pgOpen').onclick = () => { native('open', { id: progId }); closeDlg('dProg'); };
+$('pgFolder').onclick = () => native('folder', { id: progId });
+
+// About
+function openAbout() {
+  $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><div style="width:48px;height:48px">${I.app.replace('<svg ', '<svg width="48" height="48" ')}</div>
+    <div><div style="font-size:16px;font-weight:600">DownloaderX ${esc(appStatus.version || '')}</div><div class="note">Open-source download manager</div></div></div>
+    <div class="kv" style="margin-top:14px">
+      <b>yt-dlp</b><span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? 'found: YouTube and other video sites work' : 'not found: install it for YouTube and similar sites'}</span>
+      <b>ffmpeg</b><span class="${appStatus.ffmpeg ? 'ok' : 'no'}">${appStatus.ffmpeg ? 'found: streams are saved as .mp4' : 'not found: streams are saved as .ts'}</span>
+      <b>Local API</b><code>${esc(location.origin)}</code></div>
+    ${appStatus.ytdlp && appStatus.ffmpeg ? '' : '<p class="note" style="margin-bottom:0">Install both with: <code>winget install yt-dlp.yt-dlp Gyan.FFmpeg</code>, then restart DownloaderX.</p>'}`;
+  dlg('dAbout');
+}
+
+// Completion notice
+const toast = $('toast'); let toastId = null, toastTimer = 0;
+function showToast(i) {
+  if (!store.get('toast', true)) return;
+  toastId = i.id;
+  $('toastBd').innerHTML = `${iconHtml(i)}<div><span style="font-weight:600">${esc(nameOf(i))}</span><span class="note">${size(i.total)} · ${esc(i.path || '')}</span></div>`;
+  toast.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('on'), 9000);
+}
+$('toastOpen').onclick = () => { native('open', { id: toastId }); toast.classList.remove('on'); };
+$('toastFolder').onclick = () => { native('folder', { id: toastId }); toast.classList.remove('on'); };
+
+// ---------- keyboard, paste, drop ----------
+addEventListener('keydown', e => {
+  if (e.key === 'Escape') { if (pop.style.display === 'block') return hideMenu(); if (openDlgs.length) return closeDlg(openDlgs[openDlgs.length - 1]); }
+  if (openDlgs.length || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); openAdd(); }
+  else if (e.ctrlKey && e.key.toLowerCase() === 'a') { e.preventDefault(); selected = new Set(shownCache.map(i => i.id)); renderRows(); renderTools(); }
+  else if (e.key === 'Delete') askDelete();
+  else if (e.key === 'Enter' && selected.size === 1) openItem([...selected][0]);
+  else if (e.key === 'F5') { e.preventDefault(); poll(); }
+  else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    const ids = shownCache.map(i => i.id); if (!ids.length) return;
+    let n = ids.indexOf(anchor); n = n < 0 ? 0 : Math.max(0, Math.min(ids.length - 1, n + (e.key === 'ArrowDown' ? 1 : -1)));
+    anchor = ids[n]; selected = new Set([anchor]); renderRows(); renderTools();
+    document.querySelector(`tr[data-id="${anchor}"]`)?.scrollIntoView({ block: 'nearest' });
+  }
+});
+document.addEventListener('paste', e => {
+  if (openDlgs.length || /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  const t = e.clipboardData.getData('text').trim();
+  const urls = t.split(/\s+/).filter(u => /^https?:\/\//i.test(u));
+  if (urls.length === 1) openInfo(urls[0]);
+  else if (urls.length > 1) { openBatch(); $('bText').value = urls.join('\n'); }
+});
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => {
+  e.preventDefault();
+  const t = (e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text')).trim().split(/\s+/)[0];
+  if (/^https?:\/\//i.test(t)) openInfo(t);
+});
+document.addEventListener('contextmenu', e => { if (!e.target.closest('input, textarea, .listwrap')) e.preventDefault(); });
+
+// ---------- polling ----------
+let prevStatus = null;
+async function poll() {
+  try {
+    items = await api('/items');
+    const now = new Map(items.map(i => [i.id, i.status]));
+    if (prevStatus) for (const i of items) if (i.status === 'done' && prevStatus.get(i.id) && prevStatus.get(i.id) !== 'done') showToast(i);
+    prevStatus = now;
+    for (const id of [...selected]) if (!now.has(id)) selected.delete(id);
+    render();
+  } catch { appStatus = {}; renderStatus(); }
+}
+async function slowPoll() {
+  try { appStatus = await api('/status'); } catch { appStatus = {}; }
+  try { settings = await api('/settings'); } catch {}
+  renderStatus();
+}
+renderHead(); render();
+slowPoll(); poll();
+setInterval(poll, 1000); setInterval(slowPoll, 5000);
 </script>
 </body>
 </html>

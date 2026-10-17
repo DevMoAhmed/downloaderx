@@ -26,7 +26,7 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
       b.onclick = async () => {
         // Prefer the site's own title (from yt-dlp) over the tab title with its " - YouTube" suffix.
         const n = c.kind.type === 'direct' ? null : r.data.title || name || tab.title;
-        const d = await send({ type: 'download', url: c.url, kind: c.kind, name: n, referer: tab.url });
+        const d = await send({ type: 'download', url: c.url, kind: c.kind, name: n, referer: tab.url, description: c.kind.type === 'direct' ? null : c.label });
         box.innerHTML = d.error ? `<span class="err">${esc(d.error)}</span>` : '<span class="on">✓ Added</span>';
       };
       box.appendChild(b);
@@ -34,6 +34,14 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
   }
 
   $('page').onclick = () => choose(tab.url, $('pageQ'), tab.title);
+
+  // Bring up the DownloaderX window; fall back to the web dashboard if the app runs headless.
+  $('dash').onclick = async e => {
+    e.preventDefault();
+    const r = await send({ type: 'show' });
+    if (r.error) chrome.tabs.create({ url: 'http://127.0.0.1:6801' });
+    window.close();
+  };
 
   const { data: media = [] } = await send({ type: 'media', tabId: tab.id });
   if (media.length) {
