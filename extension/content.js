@@ -68,7 +68,7 @@
     .bar.drag { cursor: grabbing; box-shadow: 0 6px 0 #2A1A12; }
     .go { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 7px; cursor: pointer; font-weight: 800; }
     .go:hover, .x:hover { background: #FFC83D; }
-    .go img { width: 18px; height: 18px; image-rendering: pixelated; }
+    .go img { width: 18px; height: 18px; }
     .x { display: flex; align-items: center; padding: 0 9px; border-left: 2px solid #2A1A12; cursor: pointer; font-size: 15px; font-weight: 900; }
     .menu { position: fixed; display: none; min-width: 240px; max-width: 360px; max-height: 360px; overflow: auto; padding: 6px;
       background: #FFF4E0; color: #2A1A12; border: 3px solid #2A1A12; border-radius: 12px; box-shadow: 0 5px 0 #2A1A12; }

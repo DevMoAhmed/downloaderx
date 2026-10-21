@@ -1084,7 +1084,7 @@ $('extCopy').onclick = async () => { const r = await native('ext_copy'); if (r) 
 document.addEventListener('click', e => { if (e.target.closest('.setup-ext')) { e.preventDefault(); openExtGuide(); } });
 
 function openAbout() {
-  $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><img src="/icon.png" alt="" width="64" height="64" style="image-rendering:pixelated;flex:none">
+  $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><img src="/icon.png" alt="" width="64" height="64" style="flex:none">
     <div><div style="font-size:16px;font-weight:600">DownloaderX ${esc(appStatus.version || '')}</div><div class="note">Open-source download manager</div></div></div>
     <div class="kv" style="margin-top:14px">
       <b>yt-dlp</b><span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? 'found: YouTube and other video sites work' : 'not found: install it for YouTube and similar sites'}</span>
