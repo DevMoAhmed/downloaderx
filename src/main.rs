@@ -33,6 +33,9 @@ struct Args {
     /// Start in the tray without showing the window (used for autostart)
     #[arg(long)]
     hidden: bool,
+    /// Open the window on the browser-extension setup guide (used by the installer)
+    #[arg(long)]
+    setup_extension: bool,
 }
 
 #[derive(Subcommand)]
@@ -101,18 +104,24 @@ fn main() -> Result<()> {
         Some(Cmd::Serve { port, no_open }) => rt.block_on(serve(port, !no_open)),
         Some(Cmd::Get { url, output, connections, retries, limit }) => rt.block_on(get(url, output, connections, retries, limit)),
         #[cfg(windows)]
-        None => desktop(rt, args.hidden),
+        None => desktop(rt, args.hidden, args.setup_extension),
         #[cfg(not(windows))]
         None => rt.block_on(serve(DEFAULT_PORT, !args.hidden)),
     }
 }
 
-async fn start(port: u16) -> Result<Option<(Arc<queue::Manager>, std::net::TcpListener)>> {
+async fn start(port: u16, panel: Option<&str>) -> Result<Option<(Arc<queue::Manager>, std::net::TcpListener)>> {
     let listener = match std::net::TcpListener::bind(("127.0.0.1", port)) {
         Ok(l) => l,
         Err(e) if e.kind() == std::io::ErrorKind::AddrInUse => {
             // Already running: bring that instance to the front instead.
-            let r = reqwest::Client::new().post(format!("http://127.0.0.1:{port}/api/show")).header("x-downloaderx", "1").send().await;
+            let r = reqwest::Client::new()
+                .post(format!("http://127.0.0.1:{port}/api/show"))
+                .header("x-downloaderx", "1")
+                .header("content-type", "application/json")
+                .body(serde_json::json!({ "open": panel }).to_string())
+                .send()
+                .await;
             if r.is_ok() {
                 return Ok(None);
             }
@@ -133,7 +142,7 @@ async fn start(port: u16) -> Result<Option<(Arc<queue::Manager>, std::net::TcpLi
 }
 
 async fn serve(port: u16, open: bool) -> Result<()> {
-    let Some((mgr, listener)) = start(port).await? else {
+    let Some((mgr, listener)) = start(port, None).await? else {
         println!("DownloaderX is already running");
         return Ok(());
     };
@@ -145,10 +154,11 @@ async fn serve(port: u16, open: bool) -> Result<()> {
 
 /// Window + tray on the main thread, downloads and the local API on the tokio runtime.
 #[cfg(windows)]
-fn desktop(rt: tokio::runtime::Runtime, hidden: bool) -> Result<()> {
-    let Some((mgr, listener)) = rt.block_on(start(DEFAULT_PORT))? else { return Ok(()) };
+fn desktop(rt: tokio::runtime::Runtime, hidden: bool, setup_extension: bool) -> Result<()> {
+    let panel = setup_extension.then_some("extension");
+    let Some((mgr, listener)) = rt.block_on(start(DEFAULT_PORT, panel))? else { return Ok(()) };
     rt.spawn(server::serve(mgr.clone(), listener));
-    gui::run(mgr, DEFAULT_PORT, hidden)
+    gui::run(mgr, DEFAULT_PORT, hidden && !setup_extension, panel)
 }
 
 async fn get(url: String, output: Option<PathBuf>, connections: usize, retries: u32, limit: u64) -> Result<()> {

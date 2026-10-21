@@ -1,7 +1,8 @@
 // DownloaderX extension service worker: finds media, talks to the local app.
 
 const APP = 'http://127.0.0.1:6801/api';
-const HEADERS = { 'x-downloaderx': '1', 'content-type': 'application/json' };
+// "ext" tells the app the call comes from this extension (shown as connected in its window).
+const HEADERS = { 'x-downloaderx': 'ext', 'content-type': 'application/json' };
 
 // Media files and stream playlists. Pieces of streams (.ts, .m4s, range requests) are skipped.
 const MEDIA_EXT = /\.(m3u8|mpd|mp4|webm|mkv|mov|m4v|mp3|m4a|flac|ogg|wav)(\?|#|$)/i;
@@ -191,7 +192,9 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({ id: 'link', title: 'Download with DownloaderX', contexts: ['link', 'video', 'audio', 'image'] });
   chrome.contextMenus.create({ id: 'page', title: 'Download video from this page', contexts: ['page'] });
+  app('/status').catch(() => {}); // lets the app's setup guide see the extension arrive
 });
+chrome.runtime.onStartup.addListener(() => app('/status').catch(() => {}));
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   const url = info.menuItemId === 'page' ? info.pageUrl : info.linkUrl || info.srcUrl;

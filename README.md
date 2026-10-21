@@ -29,7 +29,9 @@ DRM-protected streams (Netflix, Disney+, …) are not supported.
 ## Install (Windows 10/11)
 
 1. Run `DownloaderX-Setup-<version>.exe` and follow the wizard. It can add a desktop icon, start DownloaderX with Windows, and install yt-dlp + ffmpeg for you.
-2. Chrome or Edge → `chrome://extensions` → turn on **Developer mode** → **Load unpacked** → pick the `extension` folder inside the install folder (Start menu → *DownloaderX browser extension folder*).
+2. Leave **Show me how to add the DownloaderX extension** ticked on the last page. DownloaderX opens a short guide: one button opens Chrome's (or Edge's) extensions page and copies the extension folder; you switch on **Developer mode**, click **Load unpacked**, press Ctrl+V and Enter. The guide turns green when the extension connects. You can open it again any time with the **Browser** button.
+
+   Why not a single-file `.crx`? On Windows, Chrome and Edge only install `.crx` files that come from their stores; anything else is downloaded but never installed. Publishing to the Chrome Web Store would make the install automatic.
 
 Uninstall from Windows Settings → Apps. Your download list and settings in `%APPDATA%\downloaderx` are kept.
 

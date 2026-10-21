@@ -61,12 +61,23 @@ pub async fn serve(mgr: Arc<Manager>, listener: std::net::TcpListener) -> anyhow
     Ok(())
 }
 
+/// When the browser extension last called the API, and from which browser, so the app can
+/// show whether it is set up.
+static EXTENSION_SEEN: std::sync::Mutex<Option<(u64, &'static str)>> = std::sync::Mutex::new(None);
+
 async fn require_header(req: Request, next: Next) -> Response {
     // Reject other Host names so a website can't reach us through DNS rebinding.
     let host = req.headers().get(header::HOST).and_then(|h| h.to_str().ok()).unwrap_or("");
     let host = host.rsplit_once(':').map_or(host, |(h, _)| h);
     if !matches!(host, "127.0.0.1" | "localhost") {
         return (StatusCode::FORBIDDEN, "bad host").into_response();
+    }
+    // Extensions with host permissions often send no Origin on GET, so it also says so in the header.
+    let from_extension = req.headers().get(API_HEADER).is_some_and(|v| v == "ext")
+        || req.headers().get(header::ORIGIN).is_some_and(|o| o.as_bytes().starts_with(b"chrome-extension://"));
+    if from_extension && req.headers().contains_key(API_HEADER) {
+        let ua = req.headers().get(header::USER_AGENT).and_then(|v| v.to_str().ok()).unwrap_or("");
+        *EXTENSION_SEEN.lock().unwrap() = Some((crate::queue::now(), if ua.contains("Edg/") { "Edge" } else { "Chrome" }));
     }
     let public = matches!(req.uri().path(), "/" | "/favicon.ico" | "/icon.png") || req.uri().path().starts_with("/fonts/");
     if req.method() == Method::OPTIONS || public || req.headers().contains_key(API_HEADER) {
@@ -99,7 +110,8 @@ async fn favicon() -> impl IntoResponse {
 }
 
 async fn status(State(m): State<AppState>) -> Json<serde_json::Value> {
-    Json(json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "ffmpeg": m.ffmpeg, "ytdlp": m.ytdlp }))
+    let ext = EXTENSION_SEEN.lock().unwrap().map(|(at, browser)| json!({ "browser": browser, "ago": crate::queue::now().saturating_sub(at) }));
+    Json(json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "ffmpeg": m.ffmpeg, "ytdlp": m.ytdlp, "extension": ext }))
 }
 
 async fn items(State(m): State<AppState>) -> impl IntoResponse {
@@ -157,13 +169,19 @@ async fn schedule(State(m): State<AppState>, Json(r): Json<ScheduleReq>) -> Stat
 }
 
 /// Bring the desktop window to the front (used by a second launch and the extension).
-async fn show(State(m): State<AppState>) -> StatusCode {
+/// An optional `{"open": "extension"}` body also opens that panel.
+async fn show(State(m): State<AppState>, body: axum::body::Bytes) -> StatusCode {
+    let panel = serde_json::from_slice::<serde_json::Value>(&body).ok().and_then(|v| v["open"].as_str().map(String::from));
     match m.show_window.get() {
         Some(f) => {
-            f();
+            f(panel);
             StatusCode::OK
         }
-        None => StatusCode::NOT_FOUND,
+        // The window is still starting (two launches at once): it opens the panel when ready.
+        None => {
+            *m.pending_panel.lock().unwrap() = panel;
+            StatusCode::ACCEPTED
+        }
     }
 }
 

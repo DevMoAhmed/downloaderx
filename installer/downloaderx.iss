@@ -3,7 +3,7 @@
 ; Output: dist\DownloaderX-Setup-<version>.exe
 
 #define AppName "DownloaderX"
-#define AppVersion "0.4.1"
+#define AppVersion "0.4.2"
 #define AppExe "downloaderx.exe"
 
 [Setup]
@@ -67,6 +67,7 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "winget.exe"; Parameters: "install --id yt-dlp.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements"; StatusMsg: "Installing yt-dlp..."; Flags: runhidden waituntilterminated; Tasks: tools
 Filename: "winget.exe"; Parameters: "install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements"; StatusMsg: "Installing ffmpeg..."; Flags: runhidden waituntilterminated; Tasks: tools
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExe}"; Parameters: "--setup-extension"; Description: "Show me how to add the DownloaderX extension to Chrome or Edge"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/f /im {#AppExe}"; Flags: runhidden; RunOnceId: "StopApp"

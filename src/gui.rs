@@ -21,7 +21,7 @@ use crate::queue::{Manager, Status};
 use crate::win;
 
 enum UserEvent {
-    Show,
+    Show(Option<String>),
     Tray(TrayIconEvent),
     Menu(MenuEvent),
     Ipc(String),
@@ -35,6 +35,7 @@ struct Ipc {
     id: Option<u64>,
     url: Option<String>,
     on: Option<bool>,
+    browser: Option<String>,
 }
 
 fn rgba(png_bytes: &[u8]) -> (Vec<u8>, u32, u32) {
@@ -51,13 +52,13 @@ fn show(window: &Window) {
     window.set_focus();
 }
 
-pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool) -> anyhow::Result<()> {
+pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool, panel: Option<&str>) -> anyhow::Result<()> {
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build();
     let proxy = event_loop.create_proxy();
     {
         let p = proxy.clone();
-        let _ = mgr.show_window.set(Box::new(move || {
-            p.send_event(UserEvent::Show).ok();
+        let _ = mgr.show_window.set(Box::new(move |panel| {
+            p.send_event(UserEvent::Show(panel)).ok();
         }));
     }
 
@@ -121,6 +122,8 @@ pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool) -> anyhow::Result<()> {
         }));
     }
 
+    // A panel to open once the page has loaded (from --setup-extension or an early /show).
+    let mut pending: Option<String> = panel.map(String::from).or_else(|| mgr.pending_panel.lock().unwrap().take());
     let mut parts = Some((menu, tray_icon));
     let mut tray = None;
     event_loop.run(move |event, _, flow| {
@@ -134,7 +137,15 @@ pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool) -> anyhow::Result<()> {
                 }
             }
             Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => window.set_visible(false),
-            Event::UserEvent(UserEvent::Show) => show(&window),
+            Event::UserEvent(UserEvent::Show(panel)) => {
+                show(&window);
+                if let Some(p) = panel {
+                    // Opens it now if the page is ready; otherwise the page collects it on load.
+                    let js = format!("window.__showPanel && window.__showPanel({})", serde_json::to_string(&p).unwrap_or_default());
+                    pending = Some(p);
+                    webview.evaluate_script(&js).ok();
+                }
+            }
             Event::UserEvent(UserEvent::Tray(TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. })) => {
                 show(&window)
             }
@@ -153,6 +164,12 @@ pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool) -> anyhow::Result<()> {
             }
             Event::UserEvent(UserEvent::Ipc(msg)) => {
                 let Ok(m) = serde_json::from_str::<Ipc>(&msg) else { return };
+                if m.cmd == "take_panel" {
+                    if let Some(cb) = m.cb {
+                        reply(&webview, cb, json!(pending.take()));
+                    }
+                    return;
+                }
                 if m.cmd == "quit" {
                     mgr.save();
                     tray.take();
@@ -198,6 +215,21 @@ fn ipc(mgr: &Manager, window: &Window, m: &Ipc) -> Value {
             if let Some(u) = m.url.as_deref().filter(|u| u.starts_with("https://") || u.starts_with("http://")) {
                 win::shell_open(u);
             }
+        }
+        // Guided "Load unpacked": copy the folder path, open the browser's extensions page.
+        "ext_open" => {
+            let dir = extension_dir().display().to_string();
+            let copied = win::set_clipboard(&dir);
+            let (exe, page) = match m.browser.as_deref() {
+                Some("edge") => ("msedge.exe", "edge://extensions"),
+                _ => ("chrome.exe", "chrome://extensions"),
+            };
+            return json!({ "path": dir, "copied": copied, "opened": win::launch(exe, page) });
+        }
+        "extension_path" => return json!(extension_dir().display().to_string()),
+        "ext_copy" => {
+            let dir = extension_dir().display().to_string();
+            return json!({ "path": dir.clone(), "copied": win::set_clipboard(&dir) });
         }
         "extension_folder" => {
             let dir = extension_dir();

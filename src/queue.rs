@@ -134,8 +134,11 @@ pub struct Manager {
     file: PathBuf,
     pub ffmpeg: bool,
     pub ytdlp: bool,
-    /// Brings the desktop window to the front (set by the GUI).
-    pub show_window: OnceLock<Box<dyn Fn() + Send + Sync>>,
+    /// Brings the desktop window to the front (set by the GUI), optionally opening a
+    /// panel such as "extension".
+    pub show_window: OnceLock<Box<dyn Fn(Option<String>) + Send + Sync>>,
+    /// A panel asked for before the window existed; the window picks it up when it loads.
+    pub pending_panel: Mutex<Option<String>>,
 }
 
 pub fn now() -> u64 {
@@ -177,6 +180,7 @@ impl Manager {
             ffmpeg,
             ytdlp,
             show_window: OnceLock::new(),
+            pending_panel: Mutex::new(None),
         })
     }
 

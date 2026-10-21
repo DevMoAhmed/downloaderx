@@ -186,6 +186,20 @@ code { font: 12px Consolas, monospace; }
 #toast .bd div { overflow: hidden; }
 #toast .bd div span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #toast .ft { display: flex; justify-content: flex-end; gap: 8px; padding: 0 12px 14px; }
+/* browser extension setup guide */
+.ext-status { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 3px solid var(--ink); border-radius: 12px; background: var(--zebra); font-weight: 900; margin-bottom: 12px; }
+.ext-status.ok { background: var(--leaf); color: var(--cream); }
+.ext-pick { display: flex; gap: 8px; margin-bottom: 12px; }
+.ext-pick button { min-height: 38px; padding: 0 16px; border: 3px solid var(--ink); border-radius: 999px; background: var(--cream); font-weight: 900; cursor: pointer; }
+.ext-pick button[aria-checked="true"] { background: var(--key); box-shadow: 0 3px 0 var(--ink); }
+.ext-steps { list-style: none; counter-reset: st; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.ext-steps li { counter-increment: st; display: grid; grid-template-columns: 34px 1fr; gap: 4px 10px; align-items: start; }
+.ext-steps li::before { content: counter(st); grid-row: span 3; width: 30px; height: 30px; border: 3px solid var(--ink); border-radius: 8px; background: var(--gold); box-shadow: inset 0 -4px 0 var(--orange); display: grid; place-items: center; font: 400 15px var(--display); }
+.ext-steps li > * { grid-column: 2; }
+.ext-steps .btn { justify-self: start; margin-top: 6px; }
+.ext-path { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.ext-path code { flex: 1; min-width: 0; padding: 7px 10px; border: 3px solid var(--ink); border-radius: 10px; background: #fff; overflow-wrap: anywhere; }
+kbd { display: inline-block; padding: 0 6px; border: 2px solid var(--ink); border-bottom-width: 3px; border-radius: 6px; background: #fff; font: 800 12px var(--body); }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -286,6 +300,7 @@ code { font: 12px Consolas, monospace; }
         <li>Turn on <b>Developer mode</b>.</li>
         <li>Click <b>Load unpacked</b> and pick the extension folder.</li>
       </ol>
+      <button class="btn def desk" onclick="closeDlg('dOpt'); openExtGuide()">Set it up for me…</button>
       <button class="btn desk" onclick="native('extension_folder')">Open extension folder</button>
     </div>
   </div>
@@ -334,6 +349,26 @@ code { font: 12px Consolas, monospace; }
     <div class="segs" id="pgSegs"></div>
   </div>
   <div class="ft"><button class="btn left" id="pgFolder">Open folder</button><button class="btn" id="pgOpen">Open</button><button class="btn def" id="pgPause">Pause</button><button class="btn" data-close>Close</button></div>
+</div>
+
+<!-- Browser extension setup -->
+<div class="dlg" id="dExt" style="width:600px">
+  <div class="tt"><b>Add DownloaderX to your browser</b><button class="xbtn" data-close>✕</button></div>
+  <div class="bd">
+    <div class="ext-status" id="extStatus" role="status" aria-live="polite"></div>
+    <div class="ext-pick" role="radiogroup" aria-label="Browser">
+      <button role="radio" data-b="chrome" aria-checked="true">Chrome</button>
+      <button role="radio" data-b="edge" aria-checked="false">Edge</button>
+    </div>
+    <ol class="ext-steps">
+      <li><b>Open the extensions page.</b><span class="note">This also copies the extension's folder for step 3.</span><button class="btn def" id="extOpen">Open Chrome extensions</button></li>
+      <li><b>Turn on Developer mode.</b><span class="note" id="extWhere">It's the switch in the top-right corner.</span></li>
+      <li><b>Click Load unpacked, press <kbd>Ctrl</kbd>+<kbd>V</kbd>, then <kbd>Enter</kbd>, then Select Folder.</b>
+        <div class="ext-path"><code id="extPath">…</code><button class="btn" id="extCopy">Copy</button></div></li>
+    </ol>
+    <p class="note" style="margin-bottom:0">Browsers only install extensions on their own from their stores, so this one is added from its folder, once. After a DownloaderX update, restart the browser to pick up the new version.</p>
+  </div>
+  <div class="ft"><button class="btn def" data-close>Done</button></div>
 </div>
 
 <!-- About -->
@@ -668,7 +703,7 @@ const TOOLS = [
   { k: 'startq', t: 'Start Queue', c: 'var(--orange)', fn: () => api('/all/resume', 'POST').then(poll), on: () => items.some(i => i.status === 'paused' || i.status === 'failed') },
   { k: 'stopq', t: 'Stop Queue', fn: () => api('/all/stop_queue', 'POST').then(poll), on: () => items.some(i => i.status === 'queued') },
   { sep: true },
-  { k: 'browser', t: 'Browser', c: 'var(--sea)', fn: () => openOptions('browser') },
+  { k: 'browser', t: 'Browser', c: 'var(--sea)', fn: () => openExtGuide() },
 ];
 $('toolbar').innerHTML = TOOLS.map((b, n) => b.sep ? '<div class="tb-sep"></div>'
   : `<button class="tb" data-n="${n}" title="${esc(b.t)}"><span class="blk" style="${b.c ? '--c:' + b.c + ';' : ''}${b.g ? '--g:' + b.g : ''}">${G[b.k]}</span><span>${esc(b.t)}</span></button>`).join('');
@@ -683,6 +718,9 @@ function renderStatus() {
   const sp = run.reduce((a, i) => a + i.speed, 0);
   $('sb1').innerHTML = run.length ? `Downloading ${run.length} file${run.length > 1 ? 's' : ''} · <span class="gold">${rate(sp) || '0 KB/sec'}</span>` : `${items.length} download${items.length === 1 ? '' : 's'} · ${items.filter(i => i.status === 'queued').length} waiting`;
   $('sb2').textContent = settings ? (settings.speed_limit ? `Speed limit: ${settings.speed_limit} KB/sec` : 'Speed limit: off') : '';
+  const ext = appStatus.extension;
+  $('sb2').innerHTML = (settings ? (settings.speed_limit ? `Speed limit: ${settings.speed_limit} KB/sec` : 'Speed limit: off') : '') +
+    (appStatus.ok ? (ext ? ` · Extension <span class="ok">✓ ${esc(ext.browser)}</span>` : ' · <a href="#" class="setup-ext" style="color:var(--key)">Set up the browser extension</a>') : '');
   $('sb3').innerHTML = appStatus.ok ? `yt-dlp <span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? '✓' : '✗'}</span> · ffmpeg <span class="${appStatus.ffmpeg ? 'ok' : 'no'}">${appStatus.ffmpeg ? '✓' : '✗'}</span>` : '<span class="no">Not connected</span>';
 }
 
@@ -750,7 +788,7 @@ const MENUS = {
     { t: 'Hide to tray', hide: !DESKTOP, fn: () => native('hide') },
   ],
   help: () => [
-    { t: 'Browser extension…', fn: () => openOptions('browser') },
+    { t: 'Browser extension…', fn: () => openExtGuide() },
     { t: 'yt-dlp on GitHub', hide: !DESKTOP, fn: () => native('url', { url: 'https://github.com/yt-dlp/yt-dlp#installation' }) }, '-',
     { t: 'About DownloaderX', fn: openAbout },
   ],
@@ -1033,6 +1071,47 @@ $('pgOpen').onclick = () => { native('open', { id: progId }); closeDlg('dProg');
 $('pgFolder').onclick = () => native('folder', { id: progId });
 
 // About
+// ---------- browser extension setup ----------
+let extBrowser = 'chrome', extTimer = 0;
+const EXT_TEXT = {
+  chrome: { open: 'Open Chrome extensions', where: "It's the switch in the top-right corner of the page." },
+  edge: { open: 'Open Edge extensions', where: "It's the switch in the menu on the left, near the bottom." },
+};
+function renderExtGuide() {
+  const ext = appStatus.extension, st = $('extStatus');
+  st.className = 'ext-status' + (ext ? ' ok' : '');
+  st.innerHTML = ext
+    ? `✓ Connected. The extension in ${esc(ext.browser)} checked in ${ext.ago < 5 ? 'just now' : ext.ago + ' s ago'}. You're all set.`
+    : '<span class="spin"></span>Waiting for the extension… it checks in as soon as you finish step 3.';
+  document.querySelectorAll('.ext-pick button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.b === extBrowser)));
+  $('extOpen').textContent = EXT_TEXT[extBrowser].open;
+  $('extWhere').textContent = EXT_TEXT[extBrowser].where;
+}
+async function openExtGuide() {
+  if (!DESKTOP) return openOptions('browser');
+  renderExtGuide(); dlg('dExt');
+  $('extPath').textContent = (await native('extension_path')) || '';
+  clearInterval(extTimer);
+  extTimer = setInterval(async () => {
+    if (!$('dExt').classList.contains('on')) return clearInterval(extTimer);
+    try { appStatus = await api('/status'); } catch {}
+    renderExtGuide(); renderStatus();
+  }, 1500);
+}
+window.openPanel = name => { if (name === 'extension') openExtGuide(); };
+// Called by the app when asked to open a panel; clears the request so a reload won't repeat it.
+window.__showPanel = name => { native('take_panel'); window.openPanel(name); };
+document.querySelector('.ext-pick').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) { extBrowser = b.dataset.b; renderExtGuide(); } });
+$('extOpen').onclick = async () => {
+  const r = await native('ext_open', { browser: extBrowser });
+  if (!r) return;
+  $('extPath').textContent = r.path;
+  const name = extBrowser === 'edge' ? 'Edge' : 'Chrome';
+  toastMsg(r.opened ? `${name} is open on its extensions page.${r.copied ? ' The folder is copied.' : ''}` : `Couldn't start ${name}. Open it and go to ${extBrowser}://extensions.`);
+};
+$('extCopy').onclick = async () => { const r = await native('ext_copy'); if (r) toastMsg(r.copied ? 'Folder copied. Paste it with Ctrl+V.' : 'Copy failed. Select the path and press Ctrl+C.'); };
+document.addEventListener('click', e => { if (e.target.closest('.setup-ext')) { e.preventDefault(); openExtGuide(); } });
+
 function openAbout() {
   $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><img src="/icon.png" alt="" width="64" height="64" style="image-rendering:pixelated;flex:none">
     <div><div style="font-size:16px;font-weight:600">DownloaderX ${esc(appStatus.version || '')}</div><div class="note">Open-source download manager</div></div></div>
@@ -1044,11 +1123,21 @@ function openAbout() {
   dlg('dAbout');
 }
 
+// Short messages reuse the notice box (no file actions).
+function toastMsg(text) {
+  $('toastBd').innerHTML = `<div><span style="white-space:normal">${esc(text)}</span></div>`;
+  toast.querySelector('.tt b').textContent = 'DownloaderX';
+  toast.querySelectorAll('.ft .btn').forEach(b => b.style.display = 'none');
+  toast.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('on'), 5000);
+}
+
 // Completion notice
 const toast = $('toast'); let toastId = null, toastTimer = 0;
 function showToast(i) {
   if (!store.get('toast', true)) return;
   toastId = i.id;
+  toast.querySelector('.tt b').textContent = 'Download complete';
+  toast.querySelectorAll('.ft .btn').forEach(b => b.style.display = DESKTOP ? '' : 'none');
   $('toastBd').innerHTML = `${iconHtml(i)}<div><span style="font-weight:600">${esc(nameOf(i))}</span><span class="note">${size(i.total)} · ${esc(i.path || '')}</span></div>`;
   toast.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('on'), 9000);
 }
@@ -1105,6 +1194,7 @@ async function slowPoll() {
   renderStatus();
 }
 renderHead(); render();
+native('take_panel').then(p => p && window.openPanel(p));
 slowPoll(); poll();
 setInterval(poll, 1000); setInterval(slowPoll, 5000);
 </script>

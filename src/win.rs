@@ -63,6 +63,43 @@ pub fn refresh_path() {
     unsafe { std::env::set_var("PATH", parts.join(";")) };
 }
 
+/// Start a program found through Windows' "App Paths" (chrome.exe, msedge.exe) with arguments.
+pub fn launch(exe: &str, args: &str) -> bool {
+    let (op, e, a) = (wide("open"), wide(exe), wide(args));
+    let r = unsafe { ShellExecuteW(std::ptr::null_mut(), op.as_ptr(), e.as_ptr(), a.as_ptr(), std::ptr::null(), SW_SHOWNORMAL) };
+    r as usize > 32
+}
+
+/// Put text on the Windows clipboard.
+pub fn set_clipboard(text: &str) -> bool {
+    use windows_sys::Win32::System::DataExchange::{CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData};
+    use windows_sys::Win32::Foundation::GlobalFree;
+    use windows_sys::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
+    const CF_UNICODETEXT: u32 = 13;
+    let w = wide(text);
+    unsafe {
+        if OpenClipboard(std::ptr::null_mut()) == 0 {
+            return false;
+        }
+        EmptyClipboard();
+        let mem = GlobalAlloc(GMEM_MOVEABLE, w.len() * 2);
+        let ok = !mem.is_null() && {
+            let p = GlobalLock(mem) as *mut u16;
+            !p.is_null() && {
+                std::ptr::copy_nonoverlapping(w.as_ptr(), p, w.len());
+                GlobalUnlock(mem);
+                // On success the clipboard owns the memory.
+                !SetClipboardData(CF_UNICODETEXT, mem).is_null()
+            }
+        };
+        if !ok && !mem.is_null() {
+            GlobalFree(mem);
+        }
+        CloseClipboard();
+        ok
+    }
+}
+
 /// Open a file with its default app, or a URL in the default browser.
 pub fn shell_open(target: impl AsRef<OsStr>) -> bool {
     let (op, t) = (wide("open"), wide(target));
