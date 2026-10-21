@@ -48,6 +48,7 @@ pub async fn serve(mgr: Arc<Manager>, listener: std::net::TcpListener) -> anyhow
     let app = Router::new()
         .route("/", get(ui))
         .route("/favicon.ico", get(favicon))
+        .route("/icon.png", get(icon_png))
         .route("/fonts/{name}", get(font))
         .nest("/api", api)
         .layer(middleware::from_fn(require_header))
@@ -67,7 +68,7 @@ async fn require_header(req: Request, next: Next) -> Response {
     if !matches!(host, "127.0.0.1" | "localhost") {
         return (StatusCode::FORBIDDEN, "bad host").into_response();
     }
-    let public = matches!(req.uri().path(), "/" | "/favicon.ico") || req.uri().path().starts_with("/fonts/");
+    let public = matches!(req.uri().path(), "/" | "/favicon.ico" | "/icon.png") || req.uri().path().starts_with("/fonts/");
     if req.method() == Method::OPTIONS || public || req.headers().contains_key(API_HEADER) {
         next.run(req).await
     } else {
@@ -87,6 +88,10 @@ async fn font(Path(name): Path<String>) -> Response {
         _ => return StatusCode::NOT_FOUND.into_response(),
     };
     ([(header::CONTENT_TYPE, "font/woff2"), (header::CACHE_CONTROL, "max-age=31536000")], data).into_response()
+}
+
+async fn icon_png() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/png")], &include_bytes!("../assets/icon-256.png")[..])
 }
 
 async fn favicon() -> impl IntoResponse {

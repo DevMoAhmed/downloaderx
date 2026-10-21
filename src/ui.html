@@ -1034,7 +1034,7 @@ $('pgFolder').onclick = () => native('folder', { id: progId });
 
 // About
 function openAbout() {
-  $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><div style="width:48px;height:48px">${I.app.replace('<svg ', '<svg width="48" height="48" ')}</div>
+  $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><img src="/icon.png" alt="" width="64" height="64" style="image-rendering:pixelated;flex:none">
     <div><div style="font-size:16px;font-weight:600">DownloaderX ${esc(appStatus.version || '')}</div><div class="note">Open-source download manager</div></div></div>
     <div class="kv" style="margin-top:14px">
       <b>yt-dlp</b><span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? 'found: YouTube and other video sites work' : 'not found: install it for YouTube and similar sites'}</span>
