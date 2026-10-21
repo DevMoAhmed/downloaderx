@@ -48,6 +48,7 @@ pub async fn serve(mgr: Arc<Manager>, listener: std::net::TcpListener) -> anyhow
     let app = Router::new()
         .route("/", get(ui))
         .route("/favicon.ico", get(favicon))
+        .route("/fonts/{name}", get(font))
         .nest("/api", api)
         .layer(middleware::from_fn(require_header))
         .layer(cors)
@@ -66,7 +67,7 @@ async fn require_header(req: Request, next: Next) -> Response {
     if !matches!(host, "127.0.0.1" | "localhost") {
         return (StatusCode::FORBIDDEN, "bad host").into_response();
     }
-    let public = matches!(req.uri().path(), "/" | "/favicon.ico");
+    let public = matches!(req.uri().path(), "/" | "/favicon.ico") || req.uri().path().starts_with("/fonts/");
     if req.method() == Method::OPTIONS || public || req.headers().contains_key(API_HEADER) {
         next.run(req).await
     } else {
@@ -76,6 +77,16 @@ async fn require_header(req: Request, next: Next) -> Response {
 
 async fn ui() -> Html<&'static str> {
     Html(include_str!("ui.html"))
+}
+
+/// The UI's two typefaces, bundled so the window looks right offline.
+async fn font(Path(name): Path<String>) -> Response {
+    let data: &[u8] = match name.as_str() {
+        "titan-one.woff2" => include_bytes!("../assets/fonts/titan-one.woff2"),
+        "nunito.woff2" => include_bytes!("../assets/fonts/nunito.woff2"),
+        _ => return StatusCode::NOT_FOUND.into_response(),
+    };
+    ([(header::CONTENT_TYPE, "font/woff2"), (header::CACHE_CONTROL, "max-age=31536000")], data).into_response()
 }
 
 async fn favicon() -> impl IntoResponse {

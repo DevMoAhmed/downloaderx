@@ -3,7 +3,7 @@
 ; Output: dist\DownloaderX-Setup-<version>.exe
 
 #define AppName "DownloaderX"
-#define AppVersion "0.3.1"
+#define AppVersion "0.4.0"
 #define AppExe "downloaderx.exe"
 
 [Setup]
@@ -52,6 +52,7 @@ Name: "tools"; Description: "Install yt-dlp and ffmpeg with winget (YouTube-styl
 Source: "..\target\release\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\extension\*"; DestDir: "{app}\extension"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\assets\fonts\LICENSE.txt"; DestDir: "{app}"; DestName: "FONTS-LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExe}"

@@ -12,7 +12,7 @@ Open-source, multi-connection download manager for Windows, written in Rust, wit
 - **SHA-256 check**: paste the expected hash and the app checks the file when it finishes
 - **Stream videos (HLS .m3u8)**: pick the quality, AES-128 decryption, joined into .mp4 with ffmpeg
 - **Site videos (YouTube etc.)**: through [yt-dlp](https://github.com/yt-dlp/yt-dlp), with a quality list
-- **Desktop app**: classic download-manager window with toolbar, categories (All / Unfinished / Finished / Queues), sortable list with real Windows file icons, right-click menu, progress window per download, Options, Scheduler and a "Download complete" notice
+- **Desktop app**: a game-style download-manager window (kraft, cream and ink palette, chunky block toolbar) with toolbar, categories (All / Unfinished / Finished / Queues), sortable list with real Windows file icons, right-click menu, progress window per download, Options, Scheduler and a "Download complete" notice
 - **Runs in the tray**: closing the window keeps it running so the browser extension still works; starting it again brings the window back
 - **Paste or drag a link** anywhere in the window to add it; batch add from a list of links
 
@@ -56,3 +56,7 @@ The window is the same page as the web dashboard, shown in WebView2 (built into 
 ## Security
 
 The API listens only on 127.0.0.1. It accepts only `Host: 127.0.0.1/localhost`, needs an `x-downloaderx` header, and allows CORS only from browser extensions, so websites can't add downloads. Opening files, opening folders, autostart and exit are not in the HTTP API at all: only the app's own window can do them.
+
+## Fonts
+
+The window uses Titan One and Nunito, bundled in `assets/fonts` under the SIL Open Font License 1.1 (see `assets/fonts/LICENSE.txt`).
