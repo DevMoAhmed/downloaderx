@@ -20,6 +20,8 @@
   .q button { font-size:12px; }
   .msg { font-size:12px; color:var(--muted); } .err { color:var(--bad); font-size:12px; }
   label { display:flex; gap:8px; align-items:center; }
+  .opts label { padding:2px 0; } .opts label.sub { padding-left:22px; } .opts label.dis { color:var(--muted); }
+  .m .n small { display:block; }
   a { color:var(--accent); }
 </style>
 </head>
@@ -27,7 +29,11 @@
   <header><b>⬇ DownloaderX</b><span id="st">checking…</span></header>
   <div class="sec"><button class="p" id="page">Download video from this page</button> <div id="pageQ" class="q"></div></div>
   <div class="sec"><h4>Media found on this tab</h4><div id="list" class="msg">Play the video to detect it.</div></div>
-  <div class="sec"><label><input type="checkbox" id="intercept"> Take over browser downloads</label></div>
+  <div class="sec opts">
+    <label><input type="checkbox" id="intercept"> Take over browser downloads</label>
+    <label><input type="checkbox" id="float"> Show the Download button on videos</label>
+    <label class="sub"><input type="checkbox" id="floatSite"> … on <span id="site">this site</span></label>
+  </div>
   <div class="sec"><a href="http://127.0.0.1:6801" id="dash">Open DownloaderX</a></div>
   <script src="popup.js"></script>
 </body>

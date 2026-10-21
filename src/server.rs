@@ -203,14 +203,19 @@ async fn probe_inner(m: &Manager, r: &ProbeReq) -> anyhow::Result<serde_json::Va
         }
     }
     let lower = r.url.to_ascii_lowercase();
-    let looks_hls = lower.split('?').next().unwrap_or("").ends_with(".m3u8");
+    let path = lower.split(['?', '#']).next().unwrap_or("");
+    let looks_hls = path.ends_with(".m3u8");
 
     if !looks_hls {
-        let p = engine::probe(&client, &r.url, &headers).await?;
-        let ct = p.content_type.clone().unwrap_or_default();
-        if ct.contains("text/html") {
+        let p = if path.ends_with(".mpd") { None } else { Some(engine::probe(&client, &r.url, &headers).await?) };
+        let ct = match &p {
+            Some(p) => p.content_type.clone().unwrap_or_default(),
+            None => "application/dash+xml".into(),
+        };
+        // Web pages and DASH manifests: yt-dlp lists the qualities.
+        if ct.contains("text/html") || ct.contains("dash+xml") {
             if !m.ytdlp {
-                anyhow::bail!("this is a web page; install yt-dlp to download videos from it");
+                anyhow::bail!("install yt-dlp to download videos from web pages and DASH streams");
             }
             let (title, qs) = ytdlp::formats(&r.url).await?;
             let choices: Vec<Choice> = qs
@@ -219,7 +224,7 @@ async fn probe_inner(m: &Manager, r: &ProbeReq) -> anyhow::Result<serde_json::Va
                 .collect();
             return Ok(json!({ "title": title, "choices": choices }));
         }
-        if !ct.contains("mpegurl") {
+        if let Some(p) = p.filter(|_| !ct.contains("mpegurl")) {
             let label = p.filename.clone().unwrap_or("file".into());
             return Ok(json!({
                 "title": p.filename,

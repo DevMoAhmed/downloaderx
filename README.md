@@ -18,8 +18,8 @@ Open-source, multi-connection download manager for Windows, written in Rust, wit
 
 ## Chrome extension
 
-- **Floating Download button** on every video → quality menu (720p, 360p, audio only, …)
-- Finds media on the tab (badge shows count), listed in the popup
+- **Floating Download button** above every video → quality menu (720p, 360p, audio only, …). Drag it anywhere (remembered per site); its × hides it on this video, on this site, or everywhere (turn it back on in the popup)
+- Finds every video on the tab, including players inside iframes or shadow DOM, HLS (.m3u8) and DASH (.mpd) streams, and sites like YouTube that build the stream in the page. The badge shows the count, the popup lists them
 - Right-click → *Download with DownloaderX* / *Download video from this page*
 - Takes over normal browser downloads (can be turned off in the popup; small files stay in the browser)
 - Sends cookies + referer so downloads that need a login still work

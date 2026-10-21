@@ -10,9 +10,24 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
   $('st').innerHTML = st.error ? '<span class="off">● app not running</span>'
     : `<span class="on">● connected</span>${st.data.ytdlp ? '' : ' · <span title="Install yt-dlp for YouTube and similar sites">no yt-dlp</span>'}`;
 
-  const { data: s } = await send({ type: 'settings' });
-  $('intercept').checked = s?.intercept ?? true;
+  const { data: s = {} } = await send({ type: 'settings' });
+  $('intercept').checked = s.intercept ?? true;
   $('intercept').onchange = e => send({ type: 'setSettings', settings: { intercept: e.target.checked } });
+
+  // Download button on videos: everywhere, and per site.
+  let site = '';
+  try { site = new URL(tab.url).hostname.replace(/^www\./, ''); } catch {}
+  let blocked = s.floatBlocked || [];
+  $('site').textContent = site || 'this site';
+  $('float').checked = s.floatButton ?? true;
+  $('floatSite').checked = !blocked.includes(site);
+  const syncSite = () => { $('floatSite').disabled = !$('float').checked || !site; $('floatSite').parentElement.classList.toggle('dis', $('floatSite').disabled); };
+  syncSite();
+  $('float').onchange = e => { send({ type: 'setSettings', settings: { floatButton: e.target.checked } }); syncSite(); };
+  $('floatSite').onchange = e => {
+    blocked = e.target.checked ? blocked.filter(h => h !== site) : [...new Set([...blocked, site])];
+    send({ type: 'setSettings', settings: { floatBlocked: blocked } });
+  };
 
   // Probe a URL and show its qualities as buttons inside `box`.
   async function choose(url, box, name) {
@@ -48,8 +63,10 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
     $('list').innerHTML = '';
     for (const m of [...media].reverse()) {
       const row = document.createElement('div');
-      const name = decodeURIComponent(new URL(m.url).pathname.split('/').pop() || m.url);
-      row.innerHTML = `<div class="m"><span class="n" title="${esc(m.url)}">${esc(name)}</span><small>${m.type === 'hls' ? 'stream' : size(m.size)}</small><button>Get</button></div><div class="q"></div>`;
+      // "page": a player that builds the stream itself (YouTube, Vimeo…); yt-dlp gets it from the page.
+      const name = m.type === 'page' ? (m.title || new URL(m.url).hostname) : decodeURIComponent(new URL(m.url).pathname.split('/').pop() || m.url);
+      const kind = m.type === 'page' ? 'video on page' : m.type === 'hls' || m.type === 'dash' ? 'stream' : size(m.size) || 'video';
+      row.innerHTML = `<div class="m"><span class="n" title="${esc(m.url)}">${esc(name)}</span><small>${esc(kind)}</small><button>Get</button></div><div class="q"></div>`;
       row.querySelector('button').onclick = () => choose(m.url, row.querySelector('.q'), tab.title);
       $('list').appendChild(row);
     }
