@@ -63,6 +63,13 @@ pub fn refresh_path() {
     unsafe { std::env::set_var("PATH", parts.join(";")) };
 }
 
+/// Small (title bar, tray) and large (taskbar, Alt+Tab) icon sizes for this display.
+pub fn icon_sizes() -> (u32, u32) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXICON, SM_CXSMICON};
+    let (s, b) = unsafe { (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CXICON)) };
+    (if s > 0 { s as u32 } else { 16 }, if b > 0 { b as u32 } else { 32 })
+}
+
 /// Start a program found through Windows' "App Paths" (chrome.exe, msedge.exe) with arguments.
 pub fn launch(exe: &str, args: &str) -> bool {
     let (op, e, a) = (wide("open"), wide(exe), wide(args));

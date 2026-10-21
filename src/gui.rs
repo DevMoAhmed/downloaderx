@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use tao::dpi::LogicalSize;
 use tao::event::{Event, StartCause, WindowEvent};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
+use tao::platform::windows::WindowBuilderExtWindows;
 use tao::window::{Window, WindowBuilder};
 use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
 use tray_icon::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -46,6 +47,15 @@ fn rgba(png_bytes: &[u8]) -> (Vec<u8>, u32, u32) {
     (buf, info.width, info.height)
 }
 
+/// The app icon at `size` px from the exe's icon resource (falls back to the PNG).
+fn app_icon(size: u32) -> Option<tao::window::Icon> {
+    use tao::platform::windows::IconExtWindows;
+    tao::window::Icon::from_resource(1, Some(tao::dpi::PhysicalSize::new(size, size))).ok().or_else(|| {
+        let (px, w, h) = rgba(include_bytes!("../assets/icon-256.png"));
+        tao::window::Icon::from_rgba(px, w, h).ok()
+    })
+}
+
 fn show(window: &Window) {
     window.set_visible(true);
     window.set_minimized(false);
@@ -62,12 +72,15 @@ pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool, panel: Option<&str>) -> a
         }));
     }
 
-    let (px, w, h) = rgba(include_bytes!("../assets/icon-256.png"));
+    // Both window icons come from the .ico inside the exe at the sizes Windows asks for, so
+    // the hand-drawn 16 px is used and the taskbar never falls back to a cached old icon.
+    let (small, big) = win::icon_sizes();
     let window = WindowBuilder::new()
         .with_title("DownloaderX")
         .with_inner_size(LogicalSize::new(1180.0, 700.0))
         .with_min_inner_size(LogicalSize::new(640.0, 360.0))
-        .with_window_icon(tao::window::Icon::from_rgba(px, w, h).ok())
+        .with_window_icon(app_icon(small))
+        .with_taskbar_icon(app_icon(big))
         .with_visible(!hidden)
         .build(&event_loop)?;
 
@@ -103,8 +116,13 @@ pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool, panel: Option<&str>) -> a
             .build(&window)?
     };
 
-    let (px, w, h) = rgba(include_bytes!("../assets/icon-32.png"));
-    let tray_icon = tray_icon::Icon::from_rgba(px, w, h)?;
+    let tray_icon = match tray_icon::Icon::from_resource(1, Some((small, small))) {
+        Ok(i) => i,
+        Err(_) => {
+            let (px, w, h) = rgba(include_bytes!("../assets/icon-32.png"));
+            tray_icon::Icon::from_rgba(px, w, h)?
+        }
+    };
     let menu = Menu::new();
     let open_i = MenuItem::new("Open DownloaderX", true, None);
     let start_i = MenuItem::new("Start all", true, None);

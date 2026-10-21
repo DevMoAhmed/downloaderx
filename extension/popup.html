@@ -3,30 +3,34 @@
 <head>
 <meta charset="utf-8">
 <style>
-  :root { --bg:#fff; --text:#1d2330; --muted:#6b7385; --line:#e3e6ec; --accent:#2f6fed; --soft:#e6eefe; --bad:#d64545; --ok:#1f9d55; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#1c2028; --text:#e6e9ef; --muted:#8f97a8; --line:#2b313c; --accent:#5b8cff; --soft:#23304d; } }
-  body { margin:0; width:340px; font:13px/1.4 system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:var(--text); }
-  header { display:flex; align-items:center; gap:8px; padding:10px 12px; border-bottom:1px solid var(--line); }
-  header b { font-size:14px; } #st { margin-left:auto; font-size:12px; }
+  /* DownloaderX palette, same as the app window */
+  :root { color-scheme: light; --bg:#FFF4E0; --kraft:#F2D3A6; --text:#2A1A12; --muted:#5C6B73; --line:#E8D2AE; --gold:#F0B23C; --key:#FFC83D; --orange:#C8672E; --bad:#C9402F; --ok:#4F8A4B; --maroon:#8E2E2A; }
+  body { margin:0; width:340px; font:700 13px/1.4 "Segoe UI",system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--maroon); color:var(--bg); border-bottom:3px solid var(--text); }
+  header img { width:24px; height:24px; image-rendering:pixelated; }
+  header b { font-size:15px; font-weight:900; letter-spacing:.2px; } #st { margin-left:auto; font-size:12px; }
+  header .on { color:var(--key); } header .off { color:#FFB4A8; }
   .on { color:var(--ok); } .off { color:var(--bad); }
-  .sec { padding:8px 12px; border-bottom:1px solid var(--line); }
-  .sec h4 { margin:0 0 6px; font-size:11px; text-transform:uppercase; color:var(--muted); letter-spacing:.05em; }
+  .sec { padding:10px 12px; border-bottom:2px dashed var(--line); }
+  .sec h4 { margin:0 0 6px; font-size:11px; font-weight:900; text-transform:uppercase; color:var(--muted); letter-spacing:.06em; }
   .m { display:flex; gap:8px; align-items:center; padding:6px 0; }
   .m .n { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .m small { color:var(--muted); }
-  button { font:inherit; border:1px solid var(--line); background:var(--bg); color:var(--text); padding:4px 10px; border-radius:6px; cursor:pointer; }
-  button:hover { border-color:var(--accent); } button.p { background:var(--accent); border-color:var(--accent); color:#fff; }
-  .q { margin:2px 0 6px 0; display:flex; flex-wrap:wrap; gap:4px; }
+  button { font:inherit; font-weight:800; border:2px solid var(--text); background:var(--bg); color:var(--text); padding:4px 10px; border-radius:8px; cursor:pointer; box-shadow:0 2px 0 var(--text); }
+  button:hover { background:var(--key); }
+  button:active { transform:translateY(2px); box-shadow:none; }
+  button.p { background:var(--gold); padding:6px 12px; }
+  .q { margin:4px 0 6px 0; display:flex; flex-wrap:wrap; gap:6px; }
   .q button { font-size:12px; }
   .msg { font-size:12px; color:var(--muted); } .err { color:var(--bad); font-size:12px; }
   label { display:flex; gap:8px; align-items:center; }
-  .opts label { padding:2px 0; } .opts label.sub { padding-left:22px; } .opts label.dis { color:var(--muted); }
-  .m .n small { display:block; }
-  a { color:var(--accent); }
+  input[type=checkbox] { width:16px; height:16px; accent-color:var(--orange); }
+  .opts label { padding:2px 0; } .opts label.sub { padding-left:24px; } .opts label.dis { color:var(--muted); }
+  a { color:var(--maroon); font-weight:900; }
 </style>
 </head>
 <body>
-  <header><b>⬇ DownloaderX</b><span id="st">checking…</span></header>
+  <header><img src="icons/48.png" alt=""><b>DownloaderX</b><span id="st">checking…</span></header>
   <div class="sec"><button class="p" id="page">Download video from this page</button> <div id="pageQ" class="q"></div></div>
   <div class="sec"><h4>Media found on this tab</h4><div id="list" class="msg">Play the video to detect it.</div></div>
   <div class="sec opts">

@@ -49,7 +49,8 @@ async function setMedia(tab, list) {
 }
 function showCount(tab, n) {
   chrome.action.setBadgeText({ tabId: tab, text: n ? String(n) : '' }).catch(() => {});
-  chrome.action.setBadgeBackgroundColor({ tabId: tab, color: '#2f6fed' }).catch(() => {});
+  chrome.action.setBadgeBackgroundColor({ tabId: tab, color: '#8E2E2A' }).catch(() => {});
+  chrome.action.setBadgeTextColor?.({ tabId: tab, color: '#FFF4E0' })?.catch(() => {});
 }
 // Many media responses arrive at once; run each tab's read-modify-write one at a time
 // or they overwrite each other and the badge undercounts.

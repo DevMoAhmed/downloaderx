@@ -3,7 +3,7 @@
 ; Output: dist\DownloaderX-Setup-<version>.exe
 
 #define AppName "DownloaderX"
-#define AppVersion "0.4.2"
+#define AppVersion "0.4.3"
 #define AppExe "downloaderx.exe"
 
 [Setup]
@@ -36,6 +36,9 @@ WizardSmallImageFile=..\assets\wizard-small.bmp,..\assets\wizard-small@2x.bmp
 Compression=lzma2/max
 SolidCompression=yes
 CloseApplications=no
+; Tell Windows the program icon changed, so shortcuts, the taskbar and Settings > Apps drop
+; the icon they cached from an older version.
+ChangesAssociations=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -64,6 +67,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"" --hidden"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden waituntilterminated skipifdoesntexist
 Filename: "winget.exe"; Parameters: "install --id yt-dlp.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements"; StatusMsg: "Installing yt-dlp..."; Flags: runhidden waituntilterminated; Tasks: tools
 Filename: "winget.exe"; Parameters: "install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements"; StatusMsg: "Installing ffmpeg..."; Flags: runhidden waituntilterminated; Tasks: tools
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent

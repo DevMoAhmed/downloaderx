@@ -61,26 +61,27 @@
   host.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;z-index:2147483647;';
   const root = host.attachShadow({ mode: 'closed' });
   root.innerHTML = `<style>
-    * { box-sizing: border-box; font: 13px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif; }
-    .bar { position: fixed; display: none; align-items: stretch; border-radius: 8px; overflow: hidden; touch-action: none;
-      background: rgba(47,111,237,.96); color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.35); user-select: none; -webkit-user-select: none; }
-    .bar.drag { cursor: grabbing; box-shadow: 0 6px 18px rgba(0,0,0,.45); }
-    .go { display: flex; align-items: center; gap: 6px; padding: 6px 10px; cursor: pointer; font-weight: 600; }
-    .go:hover, .x:hover { background: rgba(0,0,0,.18); }
-    .go svg { width: 14px; height: 14px; }
-    .x { display: flex; align-items: center; padding: 0 8px; border-left: 1px solid rgba(255,255,255,.3); cursor: pointer; font-size: 15px; opacity: .85; }
+    * { box-sizing: border-box; font: 700 13px/1.3 "Segoe UI", system-ui, -apple-system, sans-serif; }
+    /* DownloaderX palette: marigold block, ink outline, cream menu */
+    .bar { position: fixed; display: none; align-items: stretch; border: 2px solid #2A1A12; border-radius: 10px; overflow: hidden; touch-action: none;
+      background: #F0B23C; color: #2A1A12; box-shadow: 0 3px 0 #2A1A12; user-select: none; -webkit-user-select: none; }
+    .bar.drag { cursor: grabbing; box-shadow: 0 6px 0 #2A1A12; }
+    .go { display: flex; align-items: center; gap: 6px; padding: 5px 10px 5px 7px; cursor: pointer; font-weight: 800; }
+    .go:hover, .x:hover { background: #FFC83D; }
+    .go img { width: 18px; height: 18px; image-rendering: pixelated; }
+    .x { display: flex; align-items: center; padding: 0 9px; border-left: 2px solid #2A1A12; cursor: pointer; font-size: 15px; font-weight: 900; }
     .menu { position: fixed; display: none; min-width: 240px; max-width: 360px; max-height: 360px; overflow: auto; padding: 6px;
-      background: #1c2028; color: #e6e9ef; border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.45); }
-    .menu .h { padding: 6px 8px; color: #8f97a8; font-size: 12px; }
-    .menu button { display: flex; width: 100%; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 6px;
-      background: transparent; color: inherit; cursor: pointer; text-align: left; }
-    .menu button:hover { background: #2b3446; }
-    .menu button span { color: #8f97a8; }
-    .err { padding: 8px; color: #ff8a8a; }
-    .ok { padding: 8px; color: #6fdc9a; }
+      background: #FFF4E0; color: #2A1A12; border: 3px solid #2A1A12; border-radius: 12px; box-shadow: 0 5px 0 #2A1A12; }
+    .menu .h { padding: 6px 8px; color: #5C6B73; font-size: 12px; font-weight: 800; }
+    .menu button { display: flex; width: 100%; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 8px;
+      background: transparent; color: inherit; cursor: pointer; text-align: left; font-weight: 800; }
+    .menu button:hover { background: #FFC83D; }
+    .menu button span { color: #5C6B73; }
+    .err { padding: 8px; color: #C9402F; }
+    .ok { padding: 8px; color: #4F8A4B; font-weight: 900; }
   </style>
   <div class="bar" title="Download with DownloaderX (drag to move)">
-    <div class="go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 4v11m0 0l-5-5m5 5l5-5M5 20h14"/></svg>Download</div>
+    <div class="go"><img alt="" src="${chrome.runtime.getURL('icons/48.png')}">Download</div>
     <div class="x" title="Hide the Download button">×</div>
   </div>
   <div class="menu"></div>`;
