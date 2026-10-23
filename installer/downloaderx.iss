@@ -3,7 +3,7 @@
 ; Output: dist\DownloaderX-Setup-<version>.exe
 
 #define AppName "DownloaderX"
-#define AppVersion "0.4.4"
+#define AppVersion "0.4.5"
 #define AppExe "downloaderx.exe"
 
 [Setup]
@@ -49,7 +49,6 @@ WelcomeLabel2=This will install [name/ver] on your computer.%n%nDownloaderX spee
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
 Name: "autostart"; Description: "Start DownloaderX with Windows (keeps the browser extension working)"; GroupDescription: "Startup:"
-Name: "tools"; Description: "Install yt-dlp and ffmpeg with winget (YouTube-style sites, .mp4 streams)"; GroupDescription: "Optional tools:"; Check: ToolsMissing
 
 [Files]
 Source: "..\target\release\{#AppExe}"; DestDir: "{app}"; Flags: ignoreversion
@@ -67,9 +66,7 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopico
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#AppName}"; ValueData: """{app}\{#AppExe}"" --hidden"; Flags: uninsdeletevalue; Tasks: autostart
 
 [Run]
-Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden waituntilterminated skipifdoesntexist
-Filename: "winget.exe"; Parameters: "install --id yt-dlp.yt-dlp -e --silent --accept-source-agreements --accept-package-agreements"; StatusMsg: "Installing yt-dlp..."; Flags: runhidden waituntilterminated; Tasks: tools
-Filename: "winget.exe"; Parameters: "install --id Gyan.FFmpeg -e --silent --accept-source-agreements --accept-package-agreements"; StatusMsg: "Installing ffmpeg..."; Flags: runhidden waituntilterminated; Tasks: tools
+Filename: "{sys}\ie4uinit.exe"; Parameters: "-show"; Flags: runhidden nowait skipifdoesntexist
 Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 Filename: "{app}\{#AppExe}"; Parameters: "--setup-extension"; Description: "Show me how to add the DownloaderX extension to Chrome or Edge"; Flags: nowait postinstall skipifsilent
 
@@ -82,26 +79,6 @@ Type: filesandordirs; Name: "{localappdata}\{#AppName}\WebView2"
 Type: dirifempty; Name: "{localappdata}\{#AppName}"
 
 [Code]
-function OnPath(Exe: String): Boolean;
-var
-  Code: Integer;
-begin
-  Result := Exec(ExpandConstant('{cmd}'), '/c where ' + Exe, '', SW_HIDE, ewWaitUntilTerminated, Code) and (Code = 0);
-end;
-
-var
-  ToolsChecked, ToolsAreMissing: Boolean;
-
-// Inno evaluates Check: functions often, so look only once.
-function ToolsMissing: Boolean;
-begin
-  if not ToolsChecked then begin
-    ToolsAreMissing := not (OnPath('yt-dlp') and OnPath('ffmpeg'));
-    ToolsChecked := True;
-  end;
-  Result := ToolsAreMissing;
-end;
-
 // An older version may be running (often hidden in the tray); stop it so its exe can be replaced.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
