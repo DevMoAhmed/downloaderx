@@ -57,9 +57,12 @@ fn app_icon(size: u32) -> Option<tao::window::Icon> {
 }
 
 fn show(window: &Window) {
+    use tao::platform::windows::WindowExtWindows;
     window.set_visible(true);
     window.set_minimized(false);
     window.set_focus();
+    // Windows keeps a background app behind the browser; take the front anyway.
+    win::bring_to_front(window.hwnd());
 }
 
 pub fn run(mgr: Arc<Manager>, port: u16, hidden: bool, panel: Option<&str>) -> anyhow::Result<()> {

@@ -29,6 +29,38 @@ pub fn attach_console() {
     unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
 }
 
+/// Put `hwnd` in front of the window the user is in (usually the browser that started a
+/// download). Windows refuses SetForegroundWindow from a background app unless its input
+/// is attached to the foreground thread; if that still fails, an "always on top" flip at
+/// least shows it above the other windows.
+pub fn bring_to_front(hwnd: isize) {
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, HWND_NOTOPMOST, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+        SetForegroundWindow, SetWindowPos,
+    };
+    let hwnd = hwnd as windows_sys::Win32::Foundation::HWND;
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg == hwnd {
+            return;
+        }
+        let me = GetCurrentThreadId();
+        let theirs = if fg.is_null() { 0 } else { GetWindowThreadProcessId(fg, std::ptr::null_mut()) };
+        let attached = theirs != 0 && theirs != me && AttachThreadInput(me, theirs, 1) != 0;
+        BringWindowToTop(hwnd);
+        let ok = SetForegroundWindow(hwnd) != 0;
+        if attached {
+            AttachThreadInput(me, theirs, 0);
+        }
+        if !ok || GetForegroundWindow() != hwnd {
+            let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW;
+            SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, flags);
+            SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, flags);
+        }
+    }
+}
+
 /// Small (title bar, tray) and large (taskbar, Alt+Tab) icon sizes for this display.
 pub fn icon_sizes() -> (u32, u32) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_CXICON, SM_CXSMICON};
