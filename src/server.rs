@@ -118,11 +118,20 @@ async fn items(State(m): State<AppState>) -> impl IntoResponse {
     Json(m.items())
 }
 
-async fn add(State(m): State<AppState>, Json(r): Json<AddRequest>) -> Response {
+async fn add(State(m): State<AppState>, headers: HeaderMap, Json(r): Json<AddRequest>) -> Response {
     if !(r.url.starts_with("http://") || r.url.starts_with("https://")) {
         return (StatusCode::BAD_REQUEST, "only http(s) URLs").into_response();
     }
-    Json(json!({ "id": m.add(r) })).into_response()
+    let starts_now = !r.paused && r.start_after.is_none();
+    let id = m.add(r);
+    // Like IDM: a download from the browser brings up its progress window.
+    let from_browser = headers.get(API_HEADER).is_some_and(|v| v == "ext");
+    if from_browser && starts_now && m.settings().show_progress {
+        if let Some(show) = m.show_window.get() {
+            show(Some(format!("progress:{id}")));
+        }
+    }
+    Json(json!({ "id": id })).into_response()
 }
 
 async fn item_action(State(m): State<AppState>, Path((id, action)): Path<(u64, String)>) -> StatusCode {

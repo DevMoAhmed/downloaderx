@@ -293,6 +293,7 @@ kbd { display: inline-block; padding: 0 6px; border: 2px solid var(--ink); borde
       <label class="chk" style="margin-top:10px"><input type="checkbox" id="oCat"> Put files into category folders (Video, Music, Documents, …)</label>
     </div>
     <div class="tab" data-t="browser">
+      <label class="chk desk" style="margin-bottom:10px"><input type="checkbox" id="oProg"> Show the progress window when a download starts from the browser</label>
       <p style="margin-top:0">The DownloaderX extension adds a <b>Download</b> button on videos, a right-click menu, and takes over normal downloads in Chrome and Edge.</p>
       <ol style="padding-left:18px;line-height:1.7">
         <li>Open <code>chrome://extensions</code> (or <code>edge://extensions</code>).</li>
@@ -941,7 +942,7 @@ async function openOptions(tab = 'general') {
   $('oConn').innerHTML = [1, 2, 4, 8, 12, 16, 24, 32].map(n => `<option ${n === s.connections ? 'selected' : ''}>${n}</option>`).join('');
   if (![...$('oConn').options].some(o => o.selected)) $('oConn').insertAdjacentHTML('beforeend', `<option selected>${s.connections}</option>`);
   $('oLimOn').checked = s.speed_limit > 0; $('oLim').value = s.speed_limit || 1024; $('oLim').disabled = !s.speed_limit;
-  $('oDir').value = s.download_dir; $('oCat').checked = s.categorize;
+  $('oDir').value = s.download_dir; $('oCat').checked = s.categorize; $('oProg').checked = s.show_progress !== false;
   $('oToast').checked = store.get('toast', true);
   $('oAuto').checked = !!(await native('autostart'));
   setTab(tab); dlg('dOpt');
@@ -954,7 +955,8 @@ function setTab(t) {
 $('oTabs').addEventListener('click', e => { const t = e.target.closest('[data-t]'); if (t) setTab(t.dataset.t); });
 $('oOk').onclick = async () => {
   const s = { max_active: Math.max(1, +$('oMax').value || 3), connections: +$('oConn').value || 8,
-    speed_limit: $('oLimOn').checked ? Math.max(1, +$('oLim').value || 0) : 0, download_dir: $('oDir').value.trim() || settings.download_dir, categorize: $('oCat').checked };
+    speed_limit: $('oLimOn').checked ? Math.max(1, +$('oLim').value || 0) : 0, download_dir: $('oDir').value.trim() || settings.download_dir, categorize: $('oCat').checked,
+    show_progress: $('oProg').checked };
   await api('/settings', 'POST', s);
   store.set('toast', $('oToast').checked);
   if (DESKTOP) await native('autostart', { on: $('oAuto').checked });
@@ -1072,7 +1074,12 @@ async function openExtGuide() {
     renderExtGuide(); renderStatus();
   }, 1500);
 }
-window.openPanel = name => { if (name === 'extension') openExtGuide(); };
+window.openPanel = name => {
+  if (name === 'extension') openExtGuide();
+  // A download from the browser: show its progress window once the list has it.
+  const id = /^progress:(\d+)$/.exec(name || '')?.[1];
+  if (id) poll().then(() => showProgress(+id));
+};
 // Called by the app when asked to open a panel; clears the request so a reload won't repeat it.
 window.__showPanel = name => { native('take_panel'); window.openPanel(name); };
 document.querySelector('.ext-pick').addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) { extBrowser = b.dataset.b; renderExtGuide(); } });

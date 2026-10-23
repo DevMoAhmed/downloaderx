@@ -81,6 +81,8 @@ pub struct Settings {
     pub speed_limit: u64,
     pub download_dir: PathBuf,
     pub categorize: bool,
+    /// Bring the window up with the progress window when a download comes from the browser.
+    pub show_progress: bool,
 }
 
 impl Default for Settings {
@@ -91,6 +93,7 @@ impl Default for Settings {
             speed_limit: 0,
             download_dir: dirs::download_dir().unwrap_or_else(|| ".".into()).join("DownloaderX"),
             categorize: true,
+            show_progress: true,
         }
     }
 }
