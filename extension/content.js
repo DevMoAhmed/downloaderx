@@ -237,8 +237,9 @@
     return r.data;
   }
 
-  // Collect download options: the video's own file, streams seen on this tab, or the page via yt-dlp.
+  // Collect download options: the video's own file, streams seen on this tab, or the page itself.
   async function findChoices(v) {
+    if (/(^|\.)youtube(-nocookie)?\.com$/.test(location.hostname)) return pageChoices();
     const direct = new Set();
     for (const s of [v?.currentSrc, v?.src, ...[...(v?.querySelectorAll('source') || [])].map(s => s.src)]) {
       if (s && /^https?:/.test(s)) direct.add(s);
@@ -264,12 +265,15 @@
         if (!choices.some(same)) choices.push(c);
       }
     }
-    if (!choices.length) {
-      // e.g. YouTube: the video is assembled in the page (blob:), so ask yt-dlp about the page itself.
-      const r = await probe(location.href);
-      choices.push(...r.choices);
-      if (r.title) choices.title = r.title;
-    }
+    if (!choices.length) return pageChoices();
+    return choices;
+  }
+
+  // The player assembles the stream in the page (blob:): ask the app about the page itself.
+  async function pageChoices() {
+    const r = await probe(location.href);
+    const choices = [...r.choices];
+    if (r.title) choices.title = r.title;
     if (!choices.length) throw new Error('No downloadable video found here.');
     return choices;
   }
@@ -280,8 +284,8 @@
     menu.querySelectorAll('button').forEach(b => b.addEventListener('click', async ev => {
       ev.stopPropagation();
       const c = choices[b.dataset.i];
-      const name = c.kind.type === 'direct' ? null : choices.title || title();
-      const r = await send({ type: 'download', url: c.url, kind: c.kind, name, referer: location.href, description: c.kind.type === 'direct' ? null : c.label });
+      const name = c.name || (c.kind.type === 'direct' ? null : choices.title || title());
+      const r = await send({ type: 'download', url: c.url, kind: c.kind, name, referer: location.href, description: c.kind.type === 'direct' ? null : c.label, headers: c.headers });
       menu.innerHTML = r.error ? `<div class="err">${esc(r.error)}</div>` : `<div class="ok">✓ Added: ${esc(c.label)}</div>`;
       setTimeout(closeMenu, r.error ? 4000 : 1500);
     }));

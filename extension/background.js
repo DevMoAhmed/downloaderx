@@ -124,7 +124,7 @@ async function inspectHls(tab, url) {
 
 // What the content script sees in the page: plain <video> files, and players that assemble the
 // stream themselves (blob: src, as on YouTube or Vimeo). Those are listed as the page (or the
-// embedded player's page), which yt-dlp can download.
+// embedded player's page), which the app reads (YouTube) when asked for its qualities.
 function pageVideos(tab, msg) {
   const found = msg.direct.map(url => ({ url, type: 'video', size: 0 }));
   if (msg.streams && /^https?:/.test(msg.url)) found.push({ url: msg.url, type: 'page', title: msg.title || '', size: 0 });
@@ -145,8 +145,10 @@ async function probe(url, referer) {
   return app('/probe', { url, headers: await headersFor(url, referer) });
 }
 
-async function download({ url, kind, name, referer, description }) {
-  return app('/add', { url, kind: kind || { type: 'direct' }, name: name || null, description: description || null, headers: await headersFor(url, referer) });
+// `headers`: extra ones a choice from /probe needs (YouTube's stream URLs expect its app's user agent).
+async function download({ url, kind, name, referer, description, headers }) {
+  const all = [...await headersFor(url, referer), ...(headers || [])];
+  return app('/add', { url, kind: kind || { type: 'direct' }, name: name || null, description: description || null, headers: all });
 }
 
 /// Probe and add the best choice (used by the context menu).
@@ -154,7 +156,7 @@ async function downloadBest(url, referer, name) {
   const r = await probe(url, referer);
   const c = r.choices[0];
   const direct = c.kind.type === 'direct';
-  await download({ url: c.url, kind: c.kind, name: direct ? null : name || r.title, referer, description: direct ? null : c.label });
+  await download({ url: c.url, kind: c.kind, name: c.name || (direct ? null : name || r.title), referer, description: direct ? null : c.label, headers: c.headers });
   return c.label;
 }
 

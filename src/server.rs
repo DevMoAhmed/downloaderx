@@ -14,7 +14,7 @@ use serde_json::json;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::queue::{AddRequest, Manager, Settings};
-use crate::{engine, hls, ytdlp};
+use crate::{dash, engine, hls, youtube};
 
 type AppState = Arc<Manager>;
 
@@ -109,9 +109,9 @@ async fn favicon() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/x-icon")], &include_bytes!("../assets/downloaderx.ico")[..])
 }
 
-async fn status(State(m): State<AppState>) -> Json<serde_json::Value> {
+async fn status() -> Json<serde_json::Value> {
     let ext = EXTENSION_SEEN.lock().unwrap().map(|(at, browser)| json!({ "browser": browser, "ago": crate::queue::now().saturating_sub(at) }));
-    Json(json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "ffmpeg": m.ffmpeg, "ytdlp": m.ytdlp, "extension": ext }))
+    Json(json!({ "ok": true, "version": env!("CARGO_PKG_VERSION"), "extension": ext }))
 }
 
 async fn items(State(m): State<AppState>) -> impl IntoResponse {
@@ -218,23 +218,38 @@ struct Choice {
     kind: serde_json::Value,
     url: String,
     size: Option<u64>,
+    /// Suggested file name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    /// Extra request headers the download needs (sent back with /add).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    headers: Vec<(String, String)>,
 }
 
 /// Work out what a URL is and which qualities can be downloaded from it.
-async fn probe(State(m): State<AppState>, Json(r): Json<ProbeReq>) -> Response {
-    match probe_inner(&m, &r).await {
+async fn probe(Json(r): Json<ProbeReq>) -> Response {
+    match probe_inner(&r).await {
         Ok(v) => Json(v).into_response(),
         Err(e) => (StatusCode::BAD_GATEWAY, Json(json!({ "error": format!("{e:#}") }))).into_response(),
     }
 }
 
-async fn probe_inner(m: &Manager, r: &ProbeReq) -> anyhow::Result<serde_json::Value> {
+async fn probe_inner(r: &ProbeReq) -> anyhow::Result<serde_json::Value> {
     let client = reqwest::Client::new();
     let mut headers = HeaderMap::new();
     for (k, v) in &r.headers {
         if let (Ok(k), Ok(v)) = (HeaderName::try_from(k.as_str()), v.parse()) {
             headers.insert(k, v);
         }
+    }
+    if let Some(id) = youtube::video_id(&r.url) {
+        let v = youtube::probe(&client, &id).await?;
+        let choices: Vec<Choice> = v
+            .choices
+            .iter()
+            .map(|c| Choice { label: c.label.clone(), kind: c.kind.clone(), url: c.url.clone(), size: c.size, name: youtube::name(&v.title, c), headers: v.headers.clone() })
+            .collect();
+        return Ok(json!({ "title": v.title, "choices": choices }));
     }
     let lower = r.url.to_ascii_lowercase();
     let path = lower.split(['?', '#']).next().unwrap_or("");
@@ -246,23 +261,29 @@ async fn probe_inner(m: &Manager, r: &ProbeReq) -> anyhow::Result<serde_json::Va
             Some(p) => p.content_type.clone().unwrap_or_default(),
             None => "application/dash+xml".into(),
         };
-        // Web pages and DASH manifests: yt-dlp lists the qualities.
-        if ct.contains("text/html") || ct.contains("dash+xml") {
-            if !m.ytdlp {
-                anyhow::bail!("install yt-dlp to download videos from web pages and DASH streams");
-            }
-            let (title, qs) = ytdlp::formats(&r.url).await?;
-            let choices: Vec<Choice> = qs
-                .into_iter()
-                .map(|q| Choice { label: q.label, kind: json!({ "type": "ytdlp", "format": q.format }), url: r.url.clone(), size: q.size })
+        if ct.contains("dash+xml") {
+            let (text, base) = hls::fetch_text(&client, &r.url, &headers).await?;
+            let reps = dash::parse(&text, &base)?;
+            let audio = dash::best_audio(&reps).map(|a| a.id.clone());
+            let mut choices: Vec<Choice> = reps
+                .iter()
+                .filter(|v| v.kind == dash::Kind::Video)
+                .map(|v| Choice { label: v.label.clone(), kind: json!({ "type": "dash", "video": v.id, "audio": audio }), url: r.url.clone(), size: None, name: None, headers: vec![] })
                 .collect();
-            return Ok(json!({ "title": title, "choices": choices }));
+            if let Some(a) = audio.as_ref().and_then(|id| reps.iter().find(|r| &r.id == id)) {
+                let label = format!("Audio only · {}", a.label.trim_start_matches("Audio · "));
+                choices.push(Choice { label, kind: json!({ "type": "dash", "video": null, "audio": a.id }), url: r.url.clone(), size: None, name: None, headers: vec![] });
+            }
+            return Ok(json!({ "title": null, "choices": choices }));
+        }
+        if ct.contains("text/html") {
+            anyhow::bail!("this is a web page: open it in Chrome or Edge and use the DownloaderX button on the video");
         }
         if let Some(p) = p.filter(|_| !ct.contains("mpegurl")) {
             let label = p.filename.clone().unwrap_or("file".into());
             return Ok(json!({
                 "title": p.filename,
-                "choices": [Choice { label, kind: json!({ "type": "direct" }), url: r.url.clone(), size: p.size }],
+                "choices": [Choice { label, kind: json!({ "type": "direct" }), url: r.url.clone(), size: p.size, name: None, headers: vec![] }],
             }));
         }
     }
@@ -271,10 +292,10 @@ async fn probe_inner(m: &Manager, r: &ProbeReq) -> anyhow::Result<serde_json::Va
     let choices: Vec<Choice> = if hls::is_master(&text) {
         hls::parse_master(&text, &base)
             .into_iter()
-            .map(|v| Choice { label: v.label, kind: json!({ "type": "hls", "audio": v.audio }), url: v.url, size: None })
+            .map(|v| Choice { label: v.label, kind: json!({ "type": "hls", "audio": v.audio }), url: v.url, size: None, name: None, headers: vec![] })
             .collect()
     } else {
-        vec![Choice { label: "Stream".into(), kind: json!({ "type": "hls", "audio": null }), url: r.url.clone(), size: None }]
+        vec![Choice { label: "Stream".into(), kind: json!({ "type": "hls", "audio": null }), url: r.url.clone(), size: None, name: None, headers: vec![] }]
     };
     Ok(json!({ "title": null, "choices": choices }))
 }

@@ -8,7 +8,7 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
 
   const st = await send({ type: 'status' });
   $('st').innerHTML = st.error ? '<span class="off">● app not running</span>'
-    : `<span class="on">● connected</span>${st.data.ytdlp ? '' : ' · <span title="Install yt-dlp for YouTube and similar sites">no yt-dlp</span>'}`;
+    : '<span class="on">● connected</span>';
 
   const { data: s = {} } = await send({ type: 'settings' });
   $('intercept').checked = s.intercept ?? true;
@@ -39,9 +39,9 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
       const b = document.createElement('button');
       b.textContent = c.label + (c.size ? ` · ${size(c.size)}` : '');
       b.onclick = async () => {
-        // Prefer the site's own title (from yt-dlp) over the tab title with its " - YouTube" suffix.
-        const n = c.kind.type === 'direct' ? null : r.data.title || name || tab.title;
-        const d = await send({ type: 'download', url: c.url, kind: c.kind, name: n, referer: tab.url, description: c.kind.type === 'direct' ? null : c.label });
+        // Prefer the site's own title over the tab title with its " - YouTube" suffix.
+        const n = c.name || (c.kind.type === 'direct' ? null : r.data.title || name || tab.title);
+        const d = await send({ type: 'download', url: c.url, kind: c.kind, name: n, referer: tab.url, description: c.kind.type === 'direct' ? null : c.label, headers: c.headers });
         box.innerHTML = d.error ? `<span class="err">${esc(d.error)}</span>` : '<span class="on">✓ Added</span>';
       };
       box.appendChild(b);
@@ -63,7 +63,7 @@ const size = b => { if (!b) return ''; const u = ['B', 'KB', 'MB', 'GB']; let i 
     $('list').innerHTML = '';
     for (const m of [...media].reverse()) {
       const row = document.createElement('div');
-      // "page": a player that builds the stream itself (YouTube, Vimeo…); yt-dlp gets it from the page.
+      // "page": a player that builds the stream itself (YouTube, Vimeo…); the app reads the page.
       const name = m.type === 'page' ? (m.title || new URL(m.url).hostname) : decodeURIComponent(new URL(m.url).pathname.split('/').pop() || m.url);
       const kind = m.type === 'page' ? 'video on page' : m.type === 'hls' || m.type === 'dash' ? 'stream' : size(m.size) || 'video';
       row.innerHTML = `<div class="m"><span class="n" title="${esc(m.url)}">${esc(name)}</span><small>${esc(kind)}</small><button>Get</button></div><div class="q"></div>`;

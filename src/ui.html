@@ -452,8 +452,8 @@ function extOf(it) {
   const n = it.name || '';
   const m = /\.([a-z0-9]{1,8})$/i.exec(n);
   if (m) return m[1].toLowerCase();
-  if (it.kind.type === 'hls') return 'mp4';
-  if (it.kind.type === 'ytdlp') return it.category === 'Music' ? 'm4a' : 'mp4';
+  if (it.kind.type === 'hls' || it.kind.type === 'merge') return 'mp4';
+  if (it.kind.type === 'dash' || it.kind.type === 'ytdlp') return it.category === 'Music' ? 'm4a' : 'mp4';
   return 'bin';
 }
 function iconHtml(it, cls = '') {
@@ -507,6 +507,8 @@ function descOf(i) {
   if (i.description) return i.description;
   if (i.kind.type === 'ytdlp') return 'Video page · ' + host(i.url);
   if (i.kind.type === 'hls') return 'Stream (HLS) · ' + host(i.url);
+  if (i.kind.type === 'dash') return 'Stream (DASH) · ' + host(i.url);
+  if (i.kind.type === 'merge') return 'Video + audio · ' + host(i.url);
   return host(i.url);
 }
 const host = u => { try { return new URL(u).host; } catch { return ''; } };
@@ -692,7 +694,7 @@ function renderStatus() {
   const ext = appStatus.extension;
   $('sb2').innerHTML = (settings ? (settings.speed_limit ? `Speed limit: ${settings.speed_limit} KB/sec` : 'Speed limit: off') : '') +
     (appStatus.ok ? (ext ? ` · Extension <span class="ok">✓ ${esc(ext.browser)}</span>` : ' · <a href="#" class="setup-ext" style="color:var(--key)">Set up the browser extension</a>') : '');
-  $('sb3').innerHTML = appStatus.ok ? `yt-dlp <span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? '✓' : '✗'}</span> · ffmpeg <span class="${appStatus.ffmpeg ? 'ok' : 'no'}">${appStatus.ffmpeg ? '✓' : '✗'}</span>` : '<span class="no">Not connected</span>';
+  $('sb3').innerHTML = appStatus.ok ? `DownloaderX ${esc(appStatus.version || '')}` : '<span class="no">Not connected</span>';
 }
 
 // ---------- menus ----------
@@ -760,7 +762,6 @@ const MENUS = {
   ],
   help: () => [
     { t: 'Browser extension…', fn: () => openExtGuide() },
-    { t: 'yt-dlp on GitHub', hide: !DESKTOP, fn: () => native('url', { url: 'https://github.com/yt-dlp/yt-dlp#installation' }) }, '-',
     { t: 'About DownloaderX', fn: openAbout },
   ],
 };
@@ -868,7 +869,7 @@ function updateInfoDir() {
   let cat = $('iCat').value;
   if (cat === 'Auto') {
     const c = chosen();
-    cat = c.kind.type === 'hls' ? 'Video' : c.kind.type === 'ytdlp' ? (String(c.kind.format).startsWith('ba') ? 'Music' : 'Video') : guessCat($('iName').value || $('iName').placeholder || info.url);
+    cat = c.kind.type === 'hls' || c.kind.type === 'merge' ? 'Video' : c.kind.type === 'dash' ? (c.kind.video ? 'Video' : 'Music') : guessCat($('iName').value || $('iName').placeholder || info.url);
   }
   $('iDir').value = settings.categorize ? settings.download_dir.replace(/[\\/]+$/, '') + '\\' + cat : settings.download_dir;
 }
@@ -883,10 +884,12 @@ $('iCat').onchange = updateInfoDir; $('iName').oninput = updateInfoDir; $('iQ').
 async function submitInfo(paused) {
   const c = chosen();
   const at = $('iAt').value ? Math.floor(new Date($('iAt').value) / 1000) : null;
-  const name = $('iName').value.trim() || null;
+  // The title filled in for a stream gives way to the choice's own name (title + quality).
+  const typed = $('iName').value.trim();
+  const name = (typed && typed !== info.title ? typed : c.name || typed) || null;
   const desc = $('iDesc').value.trim() || (c.kind.type !== 'direct' ? c.label : null);
   try {
-    const r = await api('/add', 'POST', { url: c.url, kind: c.kind, name, description: desc, priority: +$('iPri').value, start_after: at, sha256: $('iSha').value.trim() || null, paused });
+    const r = await api('/add', 'POST', { url: c.url, kind: c.kind, name, headers: c.headers || [], description: desc, priority: +$('iPri').value, start_after: at, sha256: $('iSha').value.trim() || null, paused });
     closeDlg('dInfo'); await poll();
     selected = new Set([r.id]); anchor = r.id; renderRows(); renderTools();
     if (!paused && !at) showProgress(r.id);
@@ -986,7 +989,7 @@ $('sStop').onclick = async () => { await api('/all/stop_queue', 'POST'); $('sMsg
 let propId = null;
 function showProps(id) {
   const i = items.find(x => x.id === id); if (!i) return; propId = id;
-  const kind = i.kind.type === 'ytdlp' ? 'Video page (yt-dlp)' + (i.kind.format ? ` · ${i.kind.format}` : '') : i.kind.type === 'hls' ? 'HLS stream' : 'File';
+  const kind = { ytdlp: 'Video page (old yt-dlp item)', hls: 'HLS stream', dash: 'DASH stream', merge: 'Video + separate audio' }[i.kind.type] || 'File';
   $('propKv').innerHTML = `
     <b>File name</b><span>${esc(nameOf(i))}</span>
     <b>Status</b><span>${esc(statusText(i))}</span>
@@ -1025,7 +1028,7 @@ function renderProgress() {
     <b>Downloaded</b><span>${size(i.downloaded) || '0'}${i.total ? ` ( ${p.toFixed(2)} % )` : ''}</span>
     <b>Transfer rate</b><span>${i.status === 'running' ? rate(i.speed) || '0 KB/sec' : '—'}</span>
     <b>Time left</b><span>${left(timeLeft(i)) || '—'}</span>
-    <b>Connections</b><span>${i.kind.type === 'direct' ? (i.status === 'running' ? `${conns || '—'} active` : '—') + (i.segments.length ? ` · ${i.segments.length} parts · resume supported` : '') : i.kind.type === 'hls' ? 'stream segments in parallel' : 'handled by yt-dlp'}</span>
+    <b>Connections</b><span>${i.kind.type === 'direct' ? (i.status === 'running' ? `${conns || '—'} active` : '—') + (i.segments.length ? ` · ${i.segments.length} parts · resume supported` : '') : i.kind.type === 'merge' ? 'video and audio, each in parallel parts' : 'stream segments in parallel'}</span>
     <b>Save to</b><code style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(i.path || '')}">${esc(i.path || '—')}</code>`;
   $('pgBar').style.width = p + '%';
   $('pgSegs').innerHTML = i.total && i.segments.length ? i.segments.map(([s, e, q]) => `<i style="left:${s / i.total * 100}%;width:${(q - s) / i.total * 100}%"></i>`).join('')
@@ -1087,10 +1090,8 @@ function openAbout() {
   $('aboutBd').innerHTML = `<div style="display:flex;gap:14px;align-items:center"><img src="/icon.png" alt="" width="64" height="64" style="flex:none">
     <div><div style="font-size:16px;font-weight:600">DownloaderX ${esc(appStatus.version || '')}</div><div class="note">Open-source download manager</div></div></div>
     <div class="kv" style="margin-top:14px">
-      <b>yt-dlp</b><span class="${appStatus.ytdlp ? 'ok' : 'no'}">${appStatus.ytdlp ? 'found: YouTube and other video sites work' : 'not found: install it for YouTube and similar sites'}</span>
-      <b>ffmpeg</b><span class="${appStatus.ffmpeg ? 'ok' : 'no'}">${appStatus.ffmpeg ? 'found: streams are saved as .mp4' : 'not found: streams are saved as .ts'}</span>
-      <b>Local API</b><code>${esc(location.origin)}</code></div>
-    ${appStatus.ytdlp && appStatus.ffmpeg ? '' : '<p class="note" style="margin-bottom:0">Install both with: <code>winget install yt-dlp.yt-dlp Gyan.FFmpeg</code>, then restart DownloaderX.</p>'}`;
+      <b>Streams</b><span class="ok">HLS and DASH are joined into .mp4 by DownloaderX itself; no extra tools needed</span>
+      <b>Local API</b><code>${esc(location.origin)}</code></div>`;
   dlg('dAbout');
 }
 

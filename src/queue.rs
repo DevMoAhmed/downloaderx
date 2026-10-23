@@ -16,13 +16,18 @@ use tokio_util::sync::CancellationToken;
 
 use crate::engine::{self, with_suffix, Cancelled, Progress, Target};
 use crate::limiter::Limiter;
-use crate::{hls, ytdlp};
+use crate::{dash, hls, merge};
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Kind {
     Direct,
     Hls { audio: Option<String> },
+    /// DASH manifest; the representation ids to download.
+    Dash { video: Option<String>, audio: Option<String> },
+    /// Video file at `url` plus a separate audio file, joined after download (YouTube).
+    Merge { audio: String },
+    /// Saved by versions that used yt-dlp; can't be downloaded any more.
     Ytdlp { format: String },
 }
 
@@ -132,8 +137,6 @@ pub struct Manager {
     pub limiter: Limiter,
     wake: Notify,
     file: PathBuf,
-    pub ffmpeg: bool,
-    pub ytdlp: bool,
     /// Brings the desktop window to the front (set by the GUI), optionally opening a
     /// panel such as "extension".
     pub show_window: OnceLock<Box<dyn Fn(Option<String>) + Send + Sync>>,
@@ -169,7 +172,6 @@ impl Manager {
             }
         }
         let limiter = Limiter::new(saved.settings.speed_limit * 1024);
-        let (ffmpeg, ytdlp) = tokio::join!(hls::has_ffmpeg(), ytdlp::available());
         Arc::new(Self {
             data: Mutex::new(saved),
             running: Mutex::default(),
@@ -177,8 +179,6 @@ impl Manager {
             limiter,
             wake: Notify::new(),
             file,
-            ffmpeg,
-            ytdlp,
             show_window: OnceLock::new(),
             pending_panel: Mutex::new(None),
         })
@@ -211,7 +211,9 @@ impl Manager {
             _ => None,
         });
         let cat = match (&r.kind, &name) {
-            (Kind::Hls { .. }, _) => "Video",
+            (Kind::Hls { .. } | Kind::Merge { .. }, _) => "Video",
+            (Kind::Dash { video: None, .. }, _) => "Music",
+            (Kind::Dash { .. }, _) => "Video",
             (Kind::Ytdlp { format }, _) if format.starts_with("ba") => "Music",
             (Kind::Ytdlp { .. }, _) => "Video",
             (_, Some(n)) => category(n),
@@ -270,7 +272,7 @@ impl Manager {
                 let it = d.items.remove(idx);
                 if let Some(p) = &it.path {
                     // Partial files are useless without the queue entry.
-                    for s in [".part", ".part.state", ".video.part", ".audio.part"] {
+                    for s in [".part", ".part.state", ".video.part", ".audio.part", ".video", ".audio", ".video.part.state", ".audio.part.state"] {
                         std::fs::remove_file(with_suffix(p, s)).ok();
                     }
                     if action == "delete" && it.status == Status::Done {
@@ -407,11 +409,27 @@ impl Manager {
                     let name = if name.ends_with(".mp4") { name } else { format!("{name}.mp4") };
                     engine::unique_path(&dir.join(name))
                 });
-                hls::download(&self.client, &job.url, audio.as_deref(), out, &headers, s.connections, &progress, &self.limiter, &cancel, self.ffmpeg).await
+                hls::download(&self.client, &job.url, audio.as_deref(), out, &headers, s.connections, &progress, &self.limiter, &cancel).await
             }
-            Kind::Ytdlp { format } => {
-                ytdlp::download(&job.url, format, &dir, s.connections, s.speed_limit * 1024, &progress, &cancel).await
+            Kind::Dash { video, audio } => {
+                let out = job.path.clone().unwrap_or_else(|| {
+                    let name = job.name.clone().unwrap_or("video".into());
+                    let ext = if video.is_some() { "mp4" } else { "m4a" };
+                    let name = if name.ends_with(&format!(".{ext}")) { name } else { format!("{name}.{ext}") };
+                    engine::unique_path(&dir.join(name))
+                });
+                dash::download(&self.client, &job.url, video.as_deref(), audio.as_deref(), out, &headers, s.connections, &progress, &self.limiter, &cancel).await
             }
+            Kind::Merge { audio } => {
+                let out = job.path.clone().unwrap_or_else(|| {
+                    let name = job.name.clone().unwrap_or("video".into());
+                    let name = if name.ends_with(".mp4") { name } else { format!("{name}.mp4") };
+                    engine::unique_path(&dir.join(name))
+                });
+                let opts = engine::Options { connections: s.connections, retries: 5, headers };
+                merge::download(&self.client, &job.url, audio, out, &opts, &progress, &self.limiter, &cancel).await
+            }
+            Kind::Ytdlp { .. } => Err(anyhow::anyhow!("added by an older version that used yt-dlp: open the page in your browser and download it again with the extension")),
         };
 
         let verified = match (&result, &job.sha256) {
@@ -434,7 +452,7 @@ impl Manager {
             }
             match result {
                 Ok(p) => {
-                    // yt-dlp prints no progress for a file it already had.
+                    // Nothing was counted when every part was already on disk.
                     if it.downloaded == 0 {
                         if let Ok(m) = std::fs::metadata(&p) {
                             it.downloaded = m.len();

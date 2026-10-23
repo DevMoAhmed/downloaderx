@@ -10,8 +10,9 @@ Open-source, multi-connection download manager for Windows, written in Rust, wit
 - **Speed limit**: one shared limit for all downloads, can be changed while downloading
 - **Categories**: sorts files into Video / Music / Documents / Compressed / Programs / Images
 - **SHA-256 check**: paste the expected hash and the app checks the file when it finishes
-- **Stream videos (HLS .m3u8)**: pick the quality, AES-128 decryption, joined into .mp4 with ffmpeg
-- **Site videos (YouTube etc.)**: through [yt-dlp](https://github.com/yt-dlp/yt-dlp), with a quality list
+- **Stream videos (HLS .m3u8 and DASH .mpd)**: pick the quality, AES-128 decryption, separate audio tracks; joined into .mp4 by DownloaderX's own remuxer (MPEG-TS / fMP4, H.264, H.265, AV1, AAC). No ffmpeg needed, nothing is re-encoded
+- **YouTube**: a quality list up to the highest H.264 / AV1 resolution; video and audio download in parallel parts and are joined into one .mp4. No yt-dlp needed
+- **Nothing extra to install**: the app is one exe; it never downloads helper tools
 - **Desktop app**: a game-style download-manager window (kraft, cream and ink palette, chunky block toolbar) with toolbar, categories (All / Unfinished / Finished / Queues), sortable list with real Windows file icons, right-click menu, progress window per download, Options, Scheduler and a "Download complete" notice
 - **Runs in the tray**: closing the window keeps it running so the browser extension still works; starting it again brings the window back
 - **Paste or drag a link** anywhere in the window to add it; batch add from a list of links
@@ -42,6 +43,7 @@ downloaderx                      # desktop app (window + tray)
 downloaderx --hidden             # start in the tray only (used for autostart)
 downloaderx serve --port 6801 --no-open   # no window: web dashboard at http://127.0.0.1:6801
 downloaderx get <URL> [-o FILE] [-c 16] [-l 500]   # one file, -l = KiB/s limit
+downloaderx remux OUT.mp4 VIDEO [AUDIO]    # join .ts / .aac / .mp4 files into one .mp4
 ```
 
 ## Build

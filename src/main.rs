@@ -1,16 +1,19 @@
 // No console window when started from the Start menu; `get` attaches to the caller's console.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
+mod dash;
 mod engine;
 #[cfg(windows)]
 mod gui;
 mod hls;
 mod limiter;
+mod merge;
+mod mux;
 mod queue;
 mod server;
 #[cfg(windows)]
 mod win;
-mod ytdlp;
+mod youtube;
 
 use std::path::PathBuf;
 use std::sync::atomic::Ordering::Relaxed;
@@ -64,6 +67,14 @@ enum Cmd {
         #[arg(short, long, default_value_t = 0)]
         limit: u64,
     },
+    /// Join video and audio files (MPEG-TS, AAC, MP4) into one .mp4 without re-encoding
+    Remux {
+        /// Output .mp4
+        output: PathBuf,
+        /// Input files: video first, then a separate audio file if any
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+    },
 }
 
 pub fn client() -> Result<Client> {
@@ -72,15 +83,6 @@ pub fn client() -> Result<Client> {
         .connect_timeout(Duration::from_secs(15))
         .read_timeout(Duration::from_secs(30))
         .build()?)
-}
-
-/// Child process without a console window (the GUI exe has none to share).
-pub fn command(program: &str) -> tokio::process::Command {
-    #[allow(unused_mut)]
-    let mut c = tokio::process::Command::new(program);
-    #[cfg(windows)]
-    c.creation_flags(win::CREATE_NO_WINDOW);
-    c
 }
 
 #[cfg(windows)]
@@ -92,17 +94,19 @@ pub fn shell_icon(_file: Option<&std::path::Path>, _ext: &str) -> Option<Vec<u8>
 
 fn main() -> Result<()> {
     #[cfg(windows)]
-    {
-        win::refresh_path();
-        if std::env::args_os().len() > 1 {
-            win::attach_console();
-        }
+    if std::env::args_os().len() > 1 {
+        win::attach_console();
     }
     let args = Args::parse();
     let rt = tokio::runtime::Runtime::new()?;
     match args.cmd {
         Some(Cmd::Serve { port, no_open }) => rt.block_on(serve(port, !no_open)),
         Some(Cmd::Get { url, output, connections, retries, limit }) => rt.block_on(get(url, output, connections, retries, limit)),
+        Some(Cmd::Remux { output, inputs }) => {
+            mux::remux(&inputs, &output)?;
+            println!("saved {}", output.display());
+            Ok(())
+        }
         #[cfg(windows)]
         None => desktop(rt, args.hidden, args.setup_extension),
         #[cfg(not(windows))]
@@ -129,14 +133,9 @@ async fn start(port: u16, panel: Option<&str>) -> Result<Option<(Arc<queue::Mana
         }
         Err(e) => return Err(e.into()),
     };
-    let data_dir = dirs::data_dir().unwrap_or_else(|| ".".into()).join("downloaderx");
+    // DOWNLOADERX_DATA_DIR keeps a second (test) instance away from the real queue.
+    let data_dir = std::env::var_os("DOWNLOADERX_DATA_DIR").map(PathBuf::from).unwrap_or_else(|| dirs::data_dir().unwrap_or_else(|| ".".into()).join("downloaderx"));
     let mgr = queue::Manager::new(client()?, &data_dir).await;
-    if !mgr.ytdlp {
-        eprintln!("note: yt-dlp not found, site videos (YouTube etc.) won't be available");
-    }
-    if !mgr.ffmpeg {
-        eprintln!("note: ffmpeg not found, HLS videos are saved as .ts and qualities above 720p on some sites may lack audio");
-    }
     tokio::spawn(mgr.clone().run());
     Ok(Some((mgr, listener)))
 }

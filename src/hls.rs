@@ -29,10 +29,23 @@ pub struct Variant {
     pub audio: Option<String>,
 }
 
-struct Seg {
-    url: Url,
-    range: Option<(u64, u64)>, // offset, len
+/// One piece of a stream to fetch (HLS and DASH).
+pub struct Seg {
+    pub url: Url,
+    pub range: Option<(u64, u64)>, // offset, len
     key: Option<Key>,
+}
+
+impl std::fmt::Debug for Seg {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.url)
+    }
+}
+
+impl Seg {
+    pub fn new(url: Url, range: Option<(u64, u64)>) -> Self {
+        Self { url, range, key: None }
+    }
 }
 
 #[derive(Clone)]
@@ -185,7 +198,20 @@ async fn fetch_bytes(client: &Client, seg: &Seg, headers: &HeaderMap, retries: u
         if let Some((off, len)) = seg.range {
             req = req.header(RANGE, format!("bytes={off}-{}", off + len - 1));
         }
-        let r = async { Ok::<_, anyhow::Error>(req.send().await?.error_for_status()?.bytes().await?.to_vec()) }.await;
+        let r = async {
+            let resp = req.send().await?.error_for_status()?;
+            let whole = resp.status() != reqwest::StatusCode::PARTIAL_CONTENT;
+            let body = resp.bytes().await?;
+            // A server that ignores Range sends the whole file: cut out the part we asked for.
+            match seg.range {
+                Some((off, len)) if whole => {
+                    let end = (off + len).min(body.len() as u64) as usize;
+                    Ok::<_, anyhow::Error>(body.get(off as usize..end).context("byte range past the end of the file")?.to_vec())
+                }
+                _ => Ok(body.to_vec()),
+            }
+        }
+        .await;
         match r {
             Ok(b) => return Ok(b),
             Err(_) if attempt < retries => {
@@ -216,7 +242,23 @@ async fn download_track(
         (text, base)
     };
     let (init, segs) = parse_media(&text, &base)?;
+    download_segments(client, init.as_ref(), &segs, out, headers, conns, progress, limiter).await?;
+    Ok(init.is_some())
+}
 
+/// Fetch `segs` (decrypting AES-128 ones) in parallel and write them in order to `out`,
+/// after the `init` segment if there is one.
+#[allow(clippy::too_many_arguments)]
+pub async fn download_segments(
+    client: &Client,
+    init: Option<&Seg>,
+    segs: &[Seg],
+    out: &Path,
+    headers: &HeaderMap,
+    conns: usize,
+    progress: &Progress,
+    limiter: &Limiter,
+) -> Result<()> {
     let mut keys: HashMap<Url, [u8; 16]> = HashMap::new();
     for k in segs.iter().filter_map(|s| s.key.as_ref()) {
         if !keys.contains_key(&k.uri) {
@@ -227,8 +269,7 @@ async fn download_track(
     }
 
     let mut file = fs::File::create(out).await?;
-    let fmp4 = init.is_some();
-    if let Some(init) = &init {
+    if let Some(init) = init {
         file.write_all(&fetch_bytes(client, init, headers, 5).await?).await?;
     }
     let count = segs.len() as u64;
@@ -237,7 +278,7 @@ async fn download_track(
     let keys = &keys;
     // Futures are built in a plain loop: a closure here trips the "Send is not general enough" bug.
     let mut futs = Vec::with_capacity(segs.len());
-    for seg in &segs {
+    for seg in segs {
         futs.push(fetch_segment(client, seg, headers, keys, limiter));
     }
     let mut chunks = stream::iter(futs).buffered(conns.max(1));
@@ -250,7 +291,7 @@ async fn download_track(
         progress.total.store(start_bytes + got * count / done, Relaxed);
     }
     file.flush().await?;
-    Ok(fmp4)
+    Ok(())
 }
 
 async fn fetch_segment(client: &Client, seg: &Seg, headers: &HeaderMap, keys: &HashMap<Url, [u8; 16]>, limiter: &Limiter) -> Result<Vec<u8>> {
@@ -270,7 +311,7 @@ fn decrypt(key: &[u8; 16], iv: &[u8; 16], mut data: Vec<u8>) -> Result<Vec<u8>> 
 }
 
 /// Download `url` (media or master playlist) plus optional separate audio into `out`.
-/// Uses ffmpeg to produce an .mp4 when available; otherwise keeps the raw .ts/.mp4 stream.
+/// The built-in remuxer joins them into an .mp4; if it can't, the raw stream is kept.
 #[allow(clippy::too_many_arguments)]
 pub async fn download(
     client: &Client,
@@ -282,7 +323,6 @@ pub async fn download(
     progress: &Progress,
     limiter: &Limiter,
     cancel: &CancellationToken,
-    ffmpeg: bool,
 ) -> Result<PathBuf> {
     let work = async {
         if let Some(dir) = out.parent() {
@@ -297,20 +337,18 @@ pub async fn download(
             download_track(client, a, &audio_tmp, headers, conns, progress, limiter).await?;
         }
 
-        if ffmpeg {
-            let mut cmd = crate::command("ffmpeg");
-            cmd.args(["-y", "-loglevel", "error", "-i"]).arg(&video_tmp);
-            if audio.is_some() {
-                cmd.arg("-i").arg(&audio_tmp).args(["-map", "0:v", "-map", "1:a"]);
-            }
-            let out = out.with_extension("mp4");
-            let status = cmd.args(["-c", "copy"]).arg(&out).status().await?;
-            if status.success() {
+        let mp4 = out.with_extension("mp4");
+        let mut inputs = vec![video_tmp.clone()];
+        if audio.is_some() {
+            inputs.push(audio_tmp.clone());
+        }
+        match crate::mux::remux_async(inputs, mp4.clone()).await {
+            Ok(()) => {
                 fs::remove_file(&video_tmp).await.ok();
                 fs::remove_file(&audio_tmp).await.ok();
-                return Ok(out);
+                return Ok(mp4);
             }
-            eprintln!("ffmpeg failed, keeping raw stream");
+            Err(e) => eprintln!("remux failed ({e:#}), keeping the raw stream"),
         }
         let video = out.with_extension(if fmp4 { "mp4" } else { "ts" });
         fs::rename(&video_tmp, &video).await?;
@@ -323,14 +361,4 @@ pub async fn download(
         r = work => r,
         _ = cancel.cancelled() => Err(Cancelled.into()),
     }
-}
-
-pub async fn has_ffmpeg() -> bool {
-    crate::command("ffmpeg")
-        .arg("-version")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .await
-        .is_ok_and(|s| s.success())
 }

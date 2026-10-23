@@ -12,7 +12,6 @@ use windows_sys::Win32::Graphics::Gdi::{
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
 use windows_sys::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx};
 use windows_sys::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
-use windows_sys::Win32::System::Registry::{HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, RRF_RT_REG_SZ, RegGetValueW};
 use windows_sys::Win32::UI::Shell::{
     SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON, SHGFI_USEFILEATTRIBUTES, SHGetFileInfoW, ShellExecuteW,
 };
@@ -28,39 +27,6 @@ fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
 /// The GUI exe has no console; `downloaderx get …` from a terminal still prints there.
 pub fn attach_console() {
     unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
-}
-
-/// Add PATH entries from the registry that this process didn't inherit, e.g. yt-dlp and
-/// ffmpeg that the installer just put in with winget. Call before any threads start.
-pub fn refresh_path() {
-    let read = |root: HKEY, key: &str| -> Option<String> {
-        let (k, v) = (wide(key), wide("Path"));
-        let mut len = 0u32;
-        // RRF_RT_REG_SZ also accepts REG_EXPAND_SZ and expands %VARS%.
-        let get = |buf: *mut u16, len: &mut u32| unsafe {
-            RegGetValueW(root, k.as_ptr(), v.as_ptr(), RRF_RT_REG_SZ, std::ptr::null_mut(), buf.cast(), len)
-        };
-        if get(std::ptr::null_mut(), &mut len) != 0 {
-            return None;
-        }
-        let mut buf = vec![0u16; len as usize / 2 + 1];
-        if get(buf.as_mut_ptr(), &mut len) != 0 {
-            return None;
-        }
-        buf.truncate(len as usize / 2);
-        Some(String::from_utf16_lossy(&buf).trim_end_matches(char::from(0)).to_string())
-    };
-    let current = std::env::var("PATH").unwrap_or_default();
-    let mut parts: Vec<String> = current.split(';').filter(|p| !p.is_empty()).map(String::from).collect();
-    let machine = read(HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment");
-    let user = read(HKEY_CURRENT_USER, "Environment");
-    for p in machine.iter().chain(user.iter()).flat_map(|s| s.split(';')) {
-        if !p.is_empty() && !parts.iter().any(|x| x.eq_ignore_ascii_case(p)) {
-            parts.push(p.to_string());
-        }
-    }
-    // SAFETY: called at the very start of main, before other threads exist.
-    unsafe { std::env::set_var("PATH", parts.join(";")) };
 }
 
 /// Small (title bar, tray) and large (taskbar, Alt+Tab) icon sizes for this display.
