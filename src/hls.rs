@@ -27,6 +27,8 @@ pub struct Variant {
     pub height: Option<u32>,
     /// Separate audio rendition, if the variant has one.
     pub audio: Option<String>,
+    /// The CODECS attribute, e.g. "avc1.4d401f,mp4a.40.2".
+    pub codecs: String,
 }
 
 /// One piece of a stream to fetch (HLS and DASH).
@@ -120,7 +122,8 @@ pub fn parse_master(text: &str, base: &Url) -> Vec<Variant> {
             None => rate,
         };
         let audio = a.get("AUDIO").and_then(|g| audio_groups.get(g)).cloned();
-        out.push(Variant { label, url: url.to_string(), bandwidth, height, audio });
+        let codecs = a.get("CODECS").cloned().unwrap_or_default();
+        out.push(Variant { label, url: url.to_string(), bandwidth, height, audio, codecs });
     }
     out.sort_by(|a, b| b.bandwidth.cmp(&a.bandwidth));
     out.dedup_by(|a, b| a.url == b.url);

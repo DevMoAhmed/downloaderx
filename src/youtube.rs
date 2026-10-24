@@ -17,20 +17,22 @@ struct App {
 
 const APPS: [App; 2] = [
     App {
-        name: "ANDROID_VR",
-        id: "28",
-        version: "1.65.10",
-        agent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-        extra: || json!({ "deviceMake": "Oculus", "deviceModel": "Quest 3", "androidSdkVersion": 32, "osName": "Android", "osVersion": "12L" }),
-    },
-    App {
         name: "IOS",
         id: "5",
         version: "20.10.4",
         agent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
         extra: || json!({ "deviceMake": "Apple", "deviceModel": "iPhone16,2", "osName": "iPhone", "osVersion": "18.3.2.22D82" }),
     },
+    App {
+        name: "ANDROID_VR",
+        id: "28",
+        version: "1.65.10",
+        agent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+        extra: || json!({ "deviceMake": "Oculus", "deviceModel": "Quest 3", "androidSdkVersion": 32, "osName": "Android", "osVersion": "12L" }),
+    },
 ];
+
+const BLOCKED: &str = "YouTube is blocking downloads of this video right now: its stream links stop after the first part";
 
 /// The video id of a YouTube watch, short, embed or youtu.be URL.
 pub fn video_id(url: &str) -> Option<String> {
@@ -69,7 +71,7 @@ pub struct Video {
 pub async fn probe(client: &Client, id: &str) -> Result<Video> {
     let mut last = None;
     for app in &APPS {
-        match player(client, app, id).await {
+        match from_app(client, app, id).await {
             Ok(v) => return Ok(v),
             Err(e) => last = Some(e),
         }
@@ -77,28 +79,89 @@ pub async fn probe(client: &Client, id: &str) -> Result<Video> {
     Err(last.unwrap())
 }
 
-async fn player(client: &Client, app: &App, id: &str) -> Result<Video> {
+/// Qualities from one app's answer. YouTube may hand out stream links that stop working
+/// after the first part (they need a token only its real apps can make), so the links are
+/// tried before they're offered; the HLS stream is the fallback when they don't work.
+async fn from_app(client: &Client, app: &App, id: &str) -> Result<Video> {
+    let mut resp = player(client, app, id, None).await?;
+    // "Sign in to confirm you're not a bot": asking again with the visitor id it returned
+    // usually works.
+    if resp["playabilityStatus"]["status"] != "OK" {
+        if let Some(visitor) = resp["responseContext"]["visitorData"].as_str().map(str::to_string) {
+            resp = player(client, app, id, Some(&visitor)).await?;
+        }
+    }
+    let headers = vec![("User-Agent".to_string(), app.agent.to_string())];
+    let video = parse(&resp)?;
+    if let Some(first) = video.choices.first() {
+        let mut urls = vec![first.url.as_str()];
+        urls.extend(first.kind["audio"].as_str());
+        let mut ok = true;
+        for u in urls {
+            ok &= reads_to_end(client, app, u).await;
+        }
+        if ok {
+            return Ok(Video { headers, ..video });
+        }
+    }
+    let Some(master) = resp["streamingData"]["hlsManifestUrl"].as_str() else { bail!(BLOCKED) };
+    let choices = hls_choices(client, app, master).await?;
+    Ok(Video { title: video.title, choices, headers })
+}
+
+async fn player(client: &Client, app: &App, id: &str, visitor: Option<&str>) -> Result<Value> {
     let mut ctx = json!({ "clientName": app.name, "clientVersion": app.version, "hl": "en", "gl": "US" });
     if let (Some(c), Value::Object(extra)) = (ctx.as_object_mut(), (app.extra)()) {
         c.extend(extra);
+        if let Some(v) = visitor {
+            c.insert("visitorData".into(), v.into());
+        }
     }
     let body = json!({ "context": { "client": ctx }, "videoId": id, "contentCheckOk": true, "racyCheckOk": true });
-    let bytes = client
+    let mut req = client
         .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
         .header("User-Agent", app.agent)
         .header("X-YouTube-Client-Name", app.id)
         .header("X-YouTube-Client-Version", app.version)
         .header("Origin", "https://www.youtube.com")
-        .header("Content-Type", "application/json")
-        .body(body.to_string())
-        .send()
-        .await?
-        .error_for_status()?
-        .bytes()
-        .await?;
-    let resp: Value = serde_json::from_slice(&bytes)?;
-    let video = parse(&resp)?;
-    Ok(Video { headers: vec![("User-Agent".into(), app.agent.into())], ..video })
+        .header("Content-Type", "application/json");
+    if let Some(v) = visitor {
+        req = req.header("X-Goog-Visitor-Id", v);
+    }
+    let bytes = req.body(body.to_string()).send().await?.error_for_status()?.bytes().await?;
+    Ok(serde_json::from_slice(&bytes)?)
+}
+
+/// Whether a stream link still answers at its last byte (blocked links only serve the start).
+async fn reads_to_end(client: &Client, app: &App, url: &str) -> bool {
+    let len = url::Url::parse(url).ok().and_then(|u| u.query_pairs().find(|(k, _)| k == "clen").and_then(|(_, v)| v.parse::<u64>().ok()));
+    let last = len.map_or(1_000_000, |l| l.saturating_sub(1));
+    let r = client.get(url).header("User-Agent", app.agent).header("Range", format!("bytes={last}-{last}")).send().await;
+    r.is_ok_and(|r| r.status() == reqwest::StatusCode::PARTIAL_CONTENT || r.status().is_success())
+}
+
+/// Qualities from YouTube's HLS stream: one per height, H.264 first, with its audio.
+async fn hls_choices(client: &Client, app: &App, master: &str) -> Result<Vec<Choice>> {
+    let resp = client.get(master).header("User-Agent", app.agent).send().await?.error_for_status()?;
+    let base = resp.url().clone();
+    let text = resp.text().await?;
+    let mut variants = crate::hls::parse_master(&text, &base);
+    variants.sort_by_key(|v| std::cmp::Reverse((v.height.unwrap_or(0), v.codecs.contains("avc1"), v.bandwidth)));
+    let mut seen = Vec::new();
+    let mut out = Vec::new();
+    for v in variants {
+        let h = v.height.unwrap_or(0);
+        if seen.contains(&h) {
+            continue;
+        }
+        seen.push(h);
+        let codec = if v.codecs.contains("avc1") { "" } else if v.codecs.contains("vp09") { " · VP9" } else if v.codecs.contains("av01") { " · AV1" } else { "" };
+        out.push(Choice { label: format!("{h}p{codec}"), kind: json!({ "type": "hls", "audio": v.audio }), url: v.url, size: None });
+    }
+    if out.is_empty() {
+        bail!(BLOCKED);
+    }
+    Ok(out)
 }
 
 /// Turn a player response into download choices: each height as .mp4 (H.264 preferred,
