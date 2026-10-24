@@ -219,6 +219,8 @@ struct ProbeReq {
     url: String,
     #[serde(default)]
     headers: Vec<(String, String)>,
+    /// Sent by the extension, which can solve YouTube's player challenges.
+    youtube: Option<youtube::Solver>,
 }
 
 #[derive(Serialize)]
@@ -252,7 +254,11 @@ async fn probe_inner(r: &ProbeReq) -> anyhow::Result<serde_json::Value> {
         }
     }
     if let Some(id) = youtube::video_id(&r.url) {
-        let v = youtube::probe(&client, &id).await?;
+        let v = match youtube::probe(&client, &id, r.youtube.as_ref()).await? {
+            youtube::Outcome::Ready(v) => v,
+            youtube::Outcome::NeedPlayer => return Ok(json!({ "youtube": { "need": "player" } })),
+            youtube::Outcome::Challenges { token, n, sig } => return Ok(json!({ "youtube": { "token": token, "n": n, "sig": sig } })),
+        };
         let choices: Vec<Choice> = v
             .choices
             .iter()

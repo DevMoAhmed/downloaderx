@@ -3,7 +3,7 @@
 ; Output: dist\DownloaderX-Setup-<version>.exe
 
 #define AppName "DownloaderX"
-#define AppVersion "0.5.3"
+#define AppVersion "0.5.4"
 #define AppExe "downloaderx.exe"
 
 [Setup]

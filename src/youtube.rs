@@ -1,9 +1,19 @@
-//! YouTube without yt-dlp: ask YouTube's player API for the stream URLs the way its
-//! Android VR app does (plain URLs, no signature to decipher), then list the qualities.
-//! HD comes as a video-only and an audio-only file; they are joined after download.
+//! YouTube without yt-dlp: ask YouTube's player API for the stream URLs the way its apps
+//! do, then list the qualities. HD comes as a video-only and an audio-only file; they are
+//! joined after download.
+//!
+//! The iOS and Android VR apps get plain URLs. When YouTube blocks those, the Android and
+//! TV apps are used instead: their URLs carry challenges (`n`, and sometimes a signature)
+//! that only YouTube's player code can answer. The browser extension runs that code in a
+//! sandbox (yt-dlp's EJS solver) and sends the answers back; see [`Solver`].
+
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
+use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
 use reqwest::Client;
+use serde::Deserialize;
 use serde_json::{Value, json};
 
 /// The app whose player API answers are used. Its stream URLs expect its user agent.
@@ -32,7 +42,51 @@ const APPS: [App; 2] = [
     },
 ];
 
+/// Apps whose stream URLs need the player challenges solved (by the extension).
+const SOLVED_APPS: [App; 2] = [
+    App {
+        name: "ANDROID",
+        id: "3",
+        version: "20.10.38",
+        agent: "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip",
+        extra: || json!({ "androidSdkVersion": 30, "osName": "Android", "osVersion": "11" }),
+    },
+    App {
+        name: "TVHTML5_SIMPLY",
+        id: "75",
+        version: "1.0",
+        agent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
+        extra: || json!({}),
+    },
+];
+
 const BLOCKED: &str = "YouTube is blocking downloads of this video right now: its stream links stop after the first part";
+const USE_EXTENSION: &str = "YouTube is blocking the simple way for this video: download it from the YouTube page in Chrome or Edge with the DownloaderX button";
+
+/// The extension's side of the challenge exchange, sent with every YouTube probe it makes:
+/// empty at first, then `sts` (from the current player code), then the answers.
+#[derive(Deserialize, Default, Debug)]
+pub struct Solver {
+    /// signatureTimestamp of YouTube's current player code.
+    pub sts: Option<u64>,
+    /// Which answered challenge set this is.
+    pub token: Option<String>,
+    #[serde(default)]
+    pub n: HashMap<String, String>,
+    #[serde(default)]
+    pub sig: HashMap<String, String>,
+}
+
+pub enum Outcome {
+    Ready(Video),
+    /// Send the player code's signatureTimestamp.
+    NeedPlayer,
+    /// Solve these and send the answers with `token`.
+    Challenges { token: String, n: Vec<String>, sig: Vec<String> },
+}
+
+/// Player answers waiting for their challenges to be solved, by token.
+static PENDING: LazyLock<Mutex<HashMap<String, (Instant, Vec<(usize, Value)>)>>> = LazyLock::new(Default::default);
 
 /// The video id of a YouTube watch, short, embed or youtu.be URL.
 pub fn video_id(url: &str) -> Option<String> {
@@ -68,48 +122,162 @@ pub struct Video {
     pub headers: Vec<(String, String)>,
 }
 
-pub async fn probe(client: &Client, id: &str) -> Result<Video> {
-    let mut last = None;
-    for app in &APPS {
-        match from_app(client, app, id).await {
-            Ok(v) => return Ok(v),
-            Err(e) => last = Some(e),
+/// Qualities for video `id`. `solver` is present when the caller (the extension) can solve
+/// player challenges.
+pub async fn probe(client: &Client, id: &str, solver: Option<&Solver>) -> Result<Outcome> {
+    if let Some(s) = solver {
+        if let Some(token) = &s.token {
+            return answered(client, token, s).await.map(Outcome::Ready);
+        }
+        if let Some(sts) = s.sts {
+            return challenges(client, id, sts).await;
         }
     }
-    Err(last.unwrap())
+    let mut last = None;
+    // DOWNLOADERX_YT_SOLVER_ONLY skips the plain-URL apps (to test the challenge path).
+    if std::env::var_os("DOWNLOADERX_YT_SOLVER_ONLY").is_none() {
+        for app in &APPS {
+            match from_app(client, app, id).await {
+                Ok(v) => return Ok(Outcome::Ready(v)),
+                Err(e) => last = Some(e),
+            }
+        }
+    }
+    match (solver, last) {
+        (Some(_), _) => Ok(Outcome::NeedPlayer),
+        (None, Some(e)) if e.to_string() == BLOCKED => bail!(USE_EXTENSION),
+        (None, Some(e)) => Err(e),
+        (None, None) => bail!(USE_EXTENSION),
+    }
+}
+
+/// Ask the challenge apps, keep their answers, and return the challenges to solve.
+async fn challenges(client: &Client, id: &str, sts: u64) -> Result<Outcome> {
+    let mut answers = Vec::new();
+    let mut last = None;
+    for (i, app) in SOLVED_APPS.iter().enumerate() {
+        match ask(client, app, id, Some(sts)).await {
+            Ok(resp) if resp["playabilityStatus"]["status"] == "OK" => answers.push((i, resp)),
+            Ok(resp) => last = Some(parse(&resp).err().map(|e| e.to_string()).unwrap_or_default()),
+            Err(e) => last = Some(e.to_string()),
+        }
+    }
+    if answers.is_empty() {
+        bail!("{}", last.unwrap_or(BLOCKED.into()));
+    }
+    let (mut n, mut sig) = (Vec::new(), Vec::new());
+    for (_, resp) in &answers {
+        for f in formats(resp) {
+            let (url, s, _) = stream_url(f);
+            if let Some(v) = url.as_deref().and_then(|u| query(u, "n")) {
+                n.push(v);
+            }
+            sig.extend(s);
+        }
+    }
+    n.sort();
+    n.dedup();
+    sig.sort();
+    sig.dedup();
+    let token = format!("{id}-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
+    let mut pending = PENDING.lock().unwrap();
+    pending.retain(|_, (at, _)| at.elapsed() < Duration::from_secs(600));
+    pending.insert(token.clone(), (Instant::now(), answers));
+    Ok(Outcome::Challenges { token, n, sig })
+}
+
+/// Apply the solved challenges to the kept answers and offer the first app whose links work.
+async fn answered(client: &Client, token: &str, s: &Solver) -> Result<Video> {
+    let answers = PENDING.lock().unwrap().remove(token).map(|e| e.1).context("the YouTube answer expired, try again")?;
+    for (i, mut resp) in answers {
+        let app = &SOLVED_APPS[i];
+        for key in ["formats", "adaptiveFormats"] {
+            let Some(list) = resp["streamingData"][key].as_array_mut() else { continue };
+            for f in list {
+                let (url, sig, sp) = stream_url(f);
+                let Some(url) = url else { continue };
+                let Ok(mut u) = url::Url::parse(&url) else { continue };
+                let pairs: Vec<(String, String)> = u
+                    .query_pairs()
+                    .map(|(k, v)| {
+                        let v = if k == "n" { s.n.get(v.as_ref()).cloned().unwrap_or_else(|| v.into_owned()) } else { v.into_owned() };
+                        (k.into_owned(), v)
+                    })
+                    .collect();
+                u.query_pairs_mut().clear().extend_pairs(pairs);
+                if let Some(solved) = sig.and_then(|x| s.sig.get(&x)) {
+                    u.query_pairs_mut().append_pair(&sp, solved);
+                }
+                f["url"] = Value::String(u.to_string());
+            }
+        }
+        let Ok(video) = parse(&resp) else { continue };
+        if links_work(client, app, &video).await {
+            return Ok(Video { headers: vec![("User-Agent".to_string(), app.agent.to_string())], ..video });
+        }
+    }
+    bail!(BLOCKED)
+}
+
+fn formats(resp: &Value) -> impl Iterator<Item = &Value> {
+    ["formats", "adaptiveFormats"].into_iter().flat_map(|k| resp["streamingData"][k].as_array().into_iter().flatten())
+}
+
+/// A format's URL, plus its scrambled signature and the parameter the answer goes in.
+fn stream_url(f: &Value) -> (Option<String>, Option<String>, String) {
+    if let Some(u) = f["url"].as_str() {
+        return (Some(u.to_string()), None, String::new());
+    }
+    let Some(c) = f["signatureCipher"].as_str() else { return (None, None, String::new()) };
+    let q: HashMap<String, String> = url::form_urlencoded::parse(c.as_bytes()).into_owned().collect();
+    (q.get("url").cloned(), q.get("s").cloned(), q.get("sp").cloned().unwrap_or("signature".into()))
+}
+
+fn query(url: &str, key: &str) -> Option<String> {
+    url::Url::parse(url).ok()?.query_pairs().find(|(k, _)| k == key).map(|(_, v)| v.into_owned())
+}
+
+/// Whether the top choice's video and audio links read to the end.
+async fn links_work(client: &Client, app: &App, video: &Video) -> bool {
+    let Some(first) = video.choices.first() else { return false };
+    let mut urls = vec![first.url.as_str()];
+    urls.extend(first.kind["audio"].as_str());
+    for u in urls {
+        if !reads_to_end(client, app, u).await {
+            return false;
+        }
+    }
+    true
 }
 
 /// Qualities from one app's answer. YouTube may hand out stream links that stop working
 /// after the first part (they need a token only its real apps can make), so the links are
 /// tried before they're offered; the HLS stream is the fallback when they don't work.
 async fn from_app(client: &Client, app: &App, id: &str) -> Result<Video> {
-    let mut resp = player(client, app, id, None).await?;
-    // "Sign in to confirm you're not a bot": asking again with the visitor id it returned
-    // usually works.
-    if resp["playabilityStatus"]["status"] != "OK" {
-        if let Some(visitor) = resp["responseContext"]["visitorData"].as_str().map(str::to_string) {
-            resp = player(client, app, id, Some(&visitor)).await?;
-        }
-    }
+    let resp = ask(client, app, id, None).await?;
     let headers = vec![("User-Agent".to_string(), app.agent.to_string())];
     let video = parse(&resp)?;
-    if let Some(first) = video.choices.first() {
-        let mut urls = vec![first.url.as_str()];
-        urls.extend(first.kind["audio"].as_str());
-        let mut ok = true;
-        for u in urls {
-            ok &= reads_to_end(client, app, u).await;
-        }
-        if ok {
-            return Ok(Video { headers, ..video });
-        }
+    if links_work(client, app, &video).await {
+        return Ok(Video { headers, ..video });
     }
     let Some(master) = resp["streamingData"]["hlsManifestUrl"].as_str() else { bail!(BLOCKED) };
     let choices = hls_choices(client, app, master).await?;
     Ok(Video { title: video.title, choices, headers })
 }
 
-async fn player(client: &Client, app: &App, id: &str, visitor: Option<&str>) -> Result<Value> {
+/// The player answer, asked again with the visitor id it returned when YouTube says
+/// "Sign in to confirm you're not a bot" (that usually works).
+async fn ask(client: &Client, app: &App, id: &str, sts: Option<u64>) -> Result<Value> {
+    let resp = player(client, app, id, None, sts).await?;
+    if resp["playabilityStatus"]["status"] != "OK" {
+        if let Some(visitor) = resp["responseContext"]["visitorData"].as_str().map(str::to_string) {
+            return player(client, app, id, Some(&visitor), sts).await;
+        }
+    }
+    Ok(resp)
+}
+
+async fn player(client: &Client, app: &App, id: &str, visitor: Option<&str>, sts: Option<u64>) -> Result<Value> {
     let mut ctx = json!({ "clientName": app.name, "clientVersion": app.version, "hl": "en", "gl": "US" });
     if let (Some(c), Value::Object(extra)) = (ctx.as_object_mut(), (app.extra)()) {
         c.extend(extra);
@@ -117,7 +285,10 @@ async fn player(client: &Client, app: &App, id: &str, visitor: Option<&str>) -> 
             c.insert("visitorData".into(), v.into());
         }
     }
-    let body = json!({ "context": { "client": ctx }, "videoId": id, "contentCheckOk": true, "racyCheckOk": true });
+    let mut body = json!({ "context": { "client": ctx }, "videoId": id, "contentCheckOk": true, "racyCheckOk": true });
+    if let Some(sts) = sts {
+        body["playbackContext"] = json!({ "contentPlaybackContext": { "html5Preference": "HTML5_PREF_WANTS", "signatureTimestamp": sts } });
+    }
     let mut req = client
         .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
         .header("User-Agent", app.agent)
@@ -214,8 +385,10 @@ pub fn parse(resp: &Value) -> Result<Video> {
         }
     }
     for f in list("formats").into_iter().filter(with_url) {
-        let label = f["qualityLabel"].as_str().unwrap_or("video");
-        choices.push(Choice { label: format!("{label} · single file"), kind: json!({ "type": "direct" }), url: f["url"].as_str().unwrap().to_string(), size: size(&f) });
+        let label = format!("{} · single file", f["qualityLabel"].as_str().unwrap_or("video"));
+        if !choices.iter().any(|c| c.label == label) {
+            choices.push(Choice { label, kind: json!({ "type": "direct" }), url: f["url"].as_str().unwrap().to_string(), size: size(&f) });
+        }
     }
     if let Some(a) = &audio {
         let kbps = a["bitrate"].as_u64().unwrap_or(0) / 1000;

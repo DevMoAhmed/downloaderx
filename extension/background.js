@@ -141,8 +141,56 @@ chrome.tabs.onRemoved.addListener(tab => {
 });
 
 // --- actions ---
+const YOUTUBE = /^https?:\/\/([a-z0-9-]+\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be)\//i;
+
+// Ask the app what a URL offers. For YouTube the app may need help with the player's
+// challenges: it asks for the player code's timestamp, then for the challenges to be solved,
+// which this extension does in a sandbox (see sandbox.js).
 async function probe(url, referer) {
-  return app('/probe', { url, headers: await headersFor(url, referer) });
+  const body = { url, headers: await headersFor(url, referer) };
+  if (YOUTUBE.test(url)) body.youtube = {};
+  for (let step = 0; step < 4; step++) {
+    const r = await app('/probe', body);
+    if (!r.youtube) return r;
+    if (r.youtube.need === 'player') {
+      body.youtube = { sts: (await youtubePlayer()).sts };
+    } else if (r.youtube.token) {
+      const answers = await solveChallenges(r.youtube.n, r.youtube.sig);
+      body.youtube = { token: r.youtube.token, ...answers };
+    } else {
+      break;
+    }
+  }
+  throw new Error('YouTube: could not get past the player check');
+}
+
+// YouTube's current player code (version, text, signature timestamp). The text comes from
+// the browser's cache when YouTube was opened recently; it changes every few days.
+let player = null;
+async function youtubePlayer() {
+  const api = await (await fetch('https://www.youtube.com/iframe_api')).text();
+  const version = /player\\?\/([0-9a-fA-F]{8})\\?\//.exec(api)?.[1];
+  if (!version) throw new Error('YouTube: player version not found');
+  if (player?.version !== version) {
+    const text = await (await fetch(`https://www.youtube.com/s/player/${version}/player_ias.vflset/en_US/base.js`)).text();
+    const sts = +(/(?:signatureTimestamp|sts)\s*:\s*(\d{5})/.exec(text) || [])[1];
+    if (!sts) throw new Error('YouTube: player timestamp not found');
+    player = { version, text, sts };
+  }
+  return player;
+}
+
+async function solveChallenges(n, sig) {
+  if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length) {
+    await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['IFRAME_SCRIPTING'], justification: "Solve YouTube's player challenges in a sandboxed frame" });
+  }
+  const p = await youtubePlayer();
+  const ask = text => chrome.runtime.sendMessage({ target: 'offscreen', type: 'solve', version: p.version, player: text, n, sig });
+  // The solver keeps each player version prepared; it asks for the code only the first time.
+  let r = await ask(null);
+  if (r?.need === 'player') r = await ask(p.text);
+  if (!r || r.error) throw new Error(`YouTube: challenge solver failed${r?.error ? ': ' + r.error : ''}`);
+  return { n: r.n, sig: r.sig };
 }
 
 // `headers`: extra ones a choice from /probe needs (YouTube's stream URLs expect its app's user agent).
@@ -174,6 +222,7 @@ async function notify(tab, ok, message) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, reply) => {
+  if (msg.target === 'offscreen') return false; // for the solver document, not for us
   const tab = msg.tabId ?? sender.tab?.id;
   const run = async () => {
     switch (msg.type) {
