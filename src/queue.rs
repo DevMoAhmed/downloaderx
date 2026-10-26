@@ -274,10 +274,7 @@ impl Manager {
                 self.stop(id);
                 let it = d.items.remove(idx);
                 if let Some(p) = &it.path {
-                    // Partial files are useless without the queue entry.
-                    for s in [".part", ".part.state", ".video.part", ".audio.part", ".video", ".audio", ".video.part.state", ".audio.part.state"] {
-                        std::fs::remove_file(with_suffix(p, s)).ok();
-                    }
+                    remove_partials(p);
                     if action == "delete" && it.status == Status::Done {
                         std::fs::remove_file(p).ok();
                     }
@@ -478,6 +475,9 @@ impl Manager {
                     it.error = Some(format!("{e:#}"));
                 }
             }
+        } else if let Some(p) = progress.path.lock().unwrap().clone() {
+            // Removed while running: the download saved its resume state as it stopped.
+            remove_partials(&p);
         }
         drop(d);
         self.wake.notify_one();
@@ -494,6 +494,13 @@ impl Manager {
                 std::fs::rename(&tmp, &self.file).ok();
             }
         }
+    }
+}
+
+/// Partial files are useless without the queue entry.
+fn remove_partials(p: &Path) {
+    for s in [".part", ".part.state", ".video.part", ".audio.part", ".video", ".audio", ".video.part.state", ".audio.part.state"] {
+        std::fs::remove_file(with_suffix(p, s)).ok();
     }
 }
 
