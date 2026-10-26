@@ -1,4 +1,4 @@
-// Relays solve requests from the background worker to the sandboxed solver frame.
+// Relays requests from the background worker to the sandboxed helper frame (sandbox.js).
 const frame = document.getElementById('solver');
 const ready = new Promise(r => frame.addEventListener('load', r, { once: true }));
 const waiting = new Map();
@@ -13,11 +13,12 @@ window.addEventListener('message', e => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
-  if (msg.target !== 'offscreen' || msg.type !== 'solve') return false;
+  if (msg.target !== 'offscreen') return false;
+  const { target, ...args } = msg;
   ready.then(() => {
     const id = next++;
     waiting.set(id, reply);
-    frame.contentWindow.postMessage({ id, version: msg.version, player: msg.player, n: msg.n, sig: msg.sig }, '*');
+    frame.contentWindow.postMessage({ id, ...args }, '*');
   });
   return true;
 });

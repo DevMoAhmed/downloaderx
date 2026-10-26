@@ -144,8 +144,8 @@ chrome.tabs.onRemoved.addListener(tab => {
 const YOUTUBE = /^https?:\/\/([a-z0-9-]+\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be)\//i;
 
 // Ask the app what a URL offers. For YouTube the app may need help with the player's
-// challenges: it asks for the player code's timestamp, then for the challenges to be solved,
-// which this extension does in a sandbox (see sandbox.js).
+// challenges: it asks for the player code's timestamp (sent with a BotGuard session token),
+// then for the challenges to be solved, which this extension does in a sandbox (sandbox.js).
 async function probe(url, referer) {
   const body = { url, headers: await headersFor(url, referer) };
   if (YOUTUBE.test(url)) body.youtube = {};
@@ -153,7 +153,9 @@ async function probe(url, referer) {
     const r = await app('/probe', body);
     if (!r.youtube) return r;
     if (r.youtube.need === 'player') {
-      body.youtube = { sts: (await youtubePlayer()).sts };
+      // Without a token most videos still work, so a failed BotGuard run isn't fatal.
+      const token = await youtubeToken().catch(e => (console.warn('BotGuard:', e.message), {}));
+      body.youtube = { sts: (await youtubePlayer()).sts, visitor: token.visitor, pot: token.pot };
     } else if (r.youtube.token) {
       const answers = await solveChallenges(r.youtube.n, r.youtube.sig);
       body.youtube = { token: r.youtube.token, ...answers };
@@ -180,12 +182,57 @@ async function youtubePlayer() {
   return player;
 }
 
-async function solveChallenges(n, sig) {
+// Run an operation in the sandboxed helper frame (see sandbox.js), hosted by an offscreen document.
+async function helper(msg) {
   if (!(await chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'] })).length) {
     await chrome.offscreen.createDocument({ url: 'offscreen.html', reasons: ['IFRAME_SCRIPTING'], justification: "Solve YouTube's player challenges in a sandboxed frame" });
   }
+  return chrome.runtime.sendMessage({ target: 'offscreen', ...msg });
+}
+
+// A YouTube visitor id and a BotGuard session token (PO token) bound to it, as YouTube's
+// own web player makes them. Stream links of the TV app carrying the token play in full
+// for videos YouTube otherwise cuts off. Tokens last about 12 hours.
+const WAA_KEY = 'O43z0dpjhgX20SCx4KAo', WAA_API = 'AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw';
+async function youtubeToken() {
+  const saved = (await chrome.storage.session.get('ytToken')).ytToken;
+  if (saved?.expires > Date.now()) return saved;
+  const waa = async (method, body) => {
+    const r = await fetch(`https://www.youtube.com/api/jnn/v1/${method}`, {
+      method: 'POST', headers: { 'content-type': 'application/json+protobuf', 'x-goog-api-key': WAA_API, 'x-user-agent': 'grpc-web-javascript/0.1' }, body: JSON.stringify(body),
+    });
+    return r.json();
+  };
+  const att = await (await fetch('https://www.youtube.com/youtubei/v1/att/get?prettyPrint=false', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: '2.20250925.01.00', hl: 'en' } }, engagementType: 'ENGAGEMENT_TYPE_UNBOUND' }),
+  })).json();
+  const visitor = att.responseContext?.visitorData;
+  if (!visitor) throw new Error('no visitor id');
+  // The challenge comes scrambled: base64, each byte shifted by 97.
+  const raw = await waa('Create', [WAA_KEY]);
+  let data = [];
+  if (typeof raw[1] === 'string') data = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(raw[1]), c => (c.charCodeAt(0) + 97) & 255)));
+  else if (Array.isArray(raw[0])) data = raw[0];
+  const [, script, url, , program, globalName] = data;
+  const inline = Array.isArray(script) ? script.find(v => typeof v === 'string' && v) : null;
+  const src = Array.isArray(url) ? url.find(v => typeof v === 'string' && v) : null;
+  const interpreter = inline || (src && await (await fetch(new URL(src, 'https://www.google.com/'))).text());
+  if (!interpreter || !program) throw new Error('no BotGuard challenge');
+  const bg = await helper({ op: 'botguard', interpreter, program, globalName });
+  if (bg?.error || !bg?.response) throw new Error(bg?.error || 'no BotGuard answer');
+  const [integrityToken, ttl] = await waa('GenerateIT', [WAA_KEY, bg.response]);
+  if (!integrityToken) throw new Error('Google returned no integrity token');
+  const m = await helper({ op: 'mint', integrityToken, identifier: visitor });
+  if (m?.error || !m?.pot) throw new Error(m?.error || 'no token');
+  const token = { visitor, pot: m.pot, expires: Date.now() + Math.max(600, (ttl || 3600) - 600) * 1000 };
+  await chrome.storage.session.set({ ytToken: token });
+  return token;
+}
+
+async function solveChallenges(n, sig) {
   const p = await youtubePlayer();
-  const ask = text => chrome.runtime.sendMessage({ target: 'offscreen', type: 'solve', version: p.version, player: text, n, sig });
+  const ask = text => helper({ op: 'solve', version: p.version, player: text, n, sig });
   // The solver keeps each player version prepared; it asks for the code only the first time.
   let r = await ask(null);
   if (r?.need === 'player') r = await ask(p.text);

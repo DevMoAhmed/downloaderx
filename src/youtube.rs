@@ -69,6 +69,10 @@ const USE_EXTENSION: &str = "YouTube is blocking the simple way for this video: 
 pub struct Solver {
     /// signatureTimestamp of YouTube's current player code.
     pub sts: Option<u64>,
+    /// A YouTube visitor id and a BotGuard session token (PO token) bound to it, minted by
+    /// the extension. The TV app's links play in full with them when YouTube cuts others off.
+    pub visitor: Option<String>,
+    pub pot: Option<String>,
     /// Which answered challenge set this is.
     pub token: Option<String>,
     #[serde(default)]
@@ -85,8 +89,10 @@ pub enum Outcome {
     Challenges { token: String, n: Vec<String>, sig: Vec<String> },
 }
 
-/// Player answers waiting for their challenges to be solved, by token.
-static PENDING: LazyLock<Mutex<HashMap<String, (Instant, Vec<(usize, Value)>)>>> = LazyLock::new(Default::default);
+/// Player answers (and the session token to add to their links) waiting for their
+/// challenges to be solved, by token.
+type Pending = (Instant, Vec<(usize, Value)>, Option<String>);
+static PENDING: LazyLock<Mutex<HashMap<String, Pending>>> = LazyLock::new(Default::default);
 
 /// The video id of a YouTube watch, short, embed or youtu.be URL.
 pub fn video_id(url: &str) -> Option<String> {
@@ -130,7 +136,7 @@ pub async fn probe(client: &Client, id: &str, solver: Option<&Solver>) -> Result
             return answered(client, token, s).await.map(Outcome::Ready);
         }
         if let Some(sts) = s.sts {
-            return challenges(client, id, sts).await;
+            return challenges(client, id, sts, s).await;
         }
     }
     let mut last = None;
@@ -152,11 +158,16 @@ pub async fn probe(client: &Client, id: &str, solver: Option<&Solver>) -> Result
 }
 
 /// Ask the challenge apps, keep their answers, and return the challenges to solve.
-async fn challenges(client: &Client, id: &str, sts: u64) -> Result<Outcome> {
+async fn challenges(client: &Client, id: &str, sts: u64, s: &Solver) -> Result<Outcome> {
     let mut answers = Vec::new();
     let mut last = None;
     for (i, app) in SOLVED_APPS.iter().enumerate() {
-        match ask(client, app, id, Some(sts)).await {
+        // The token is bound to the visitor id, so the player is asked as that visitor.
+        let resp = match &s.visitor {
+            Some(v) => player(client, app, id, Some(v), Some(sts)).await,
+            None => ask(client, app, id, Some(sts)).await,
+        };
+        match resp {
             Ok(resp) if resp["playabilityStatus"]["status"] == "OK" => answers.push((i, resp)),
             Ok(resp) => last = Some(parse(&resp).err().map(|e| e.to_string()).unwrap_or_default()),
             Err(e) => last = Some(e.to_string()),
@@ -181,14 +192,14 @@ async fn challenges(client: &Client, id: &str, sts: u64) -> Result<Outcome> {
     sig.dedup();
     let token = format!("{id}-{}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos()));
     let mut pending = PENDING.lock().unwrap();
-    pending.retain(|_, (at, _)| at.elapsed() < Duration::from_secs(600));
-    pending.insert(token.clone(), (Instant::now(), answers));
+    pending.retain(|_, (at, _, _)| at.elapsed() < Duration::from_secs(600));
+    pending.insert(token.clone(), (Instant::now(), answers, s.pot.clone()));
     Ok(Outcome::Challenges { token, n, sig })
 }
 
 /// Apply the solved challenges to the kept answers and offer the first app whose links work.
 async fn answered(client: &Client, token: &str, s: &Solver) -> Result<Video> {
-    let answers = PENDING.lock().unwrap().remove(token).map(|e| e.1).context("the YouTube answer expired, try again")?;
+    let (_, answers, pot) = PENDING.lock().unwrap().remove(token).context("the YouTube answer expired, try again")?;
     for (i, mut resp) in answers {
         let app = &SOLVED_APPS[i];
         for key in ["formats", "adaptiveFormats"] {
@@ -212,11 +223,38 @@ async fn answered(client: &Client, token: &str, s: &Solver) -> Result<Video> {
             }
         }
         let Ok(video) = parse(&resp) else { continue };
+        let headers = vec![("User-Agent".to_string(), app.agent.to_string())];
         if links_work(client, app, &video).await {
-            return Ok(Video { headers: vec![("User-Agent".to_string(), app.agent.to_string())], ..video });
+            return Ok(Video { headers, ..video });
+        }
+        // Links YouTube cuts off after the first part play in full with the session token.
+        if let Some(pot) = &pot {
+            let video = with_pot(video, pot);
+            if links_work(client, app, &video).await {
+                return Ok(Video { headers, ..video });
+            }
         }
     }
     bail!(BLOCKED)
+}
+
+/// Add the session token to every stream link of `video`.
+fn with_pot(mut video: Video, pot: &str) -> Video {
+    let add = |u: &str| -> String {
+        let mut url = match url::Url::parse(u) {
+            Ok(url) => url,
+            Err(_) => return u.to_string(),
+        };
+        url.query_pairs_mut().append_pair("pot", pot);
+        url.to_string()
+    };
+    for c in &mut video.choices {
+        c.url = add(&c.url);
+        if let Some(a) = c.kind["audio"].as_str().map(add) {
+            c.kind["audio"] = Value::String(a);
+        }
+    }
+    video
 }
 
 fn formats(resp: &Value) -> impl Iterator<Item = &Value> {
