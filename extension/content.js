@@ -240,6 +240,10 @@
   // Collect download options: the video's own file, streams seen on this tab, or the page itself.
   async function findChoices(v) {
     if (/(^|\.)youtube(-nocookie)?\.com$/.test(location.hostname)) return pageChoices();
+    if (/(^|\.)tiktok\.com$/.test(location.hostname)) {
+      const c = await tiktokChoices(v).catch(e => (console.warn('DownloaderX TikTok:', e.message), null));
+      if (c?.length) return c;
+    }
     const direct = new Set();
     for (const s of [v?.currentSrc, v?.src, ...[...(v?.querySelectorAll('source') || [])].map(s => s.src)]) {
       if (s && /^https?:/.test(s)) direct.add(s);
@@ -266,6 +270,49 @@
       }
     }
     if (!choices.length) return pageChoices();
+    return choices;
+  }
+
+  // TikTok plays from blob: and preloads the whole feed, so the network list can't tell which
+  // file belongs to which post. The post id is in the player's wrapper (xgwrapper-0-<id>).
+  // tiktok-page.js reads that post's data from the page; a post page opened directly has it
+  // in its own JSON too. Both list every quality with links that work with the browser's cookies.
+  async function tiktokChoices(v) {
+    const id = v?.closest('[id^="xgwrapper-"]')?.id.match(/(\d{15,})$/)?.[1] || location.pathname.match(/\/video\/(\d{15,})/)?.[1];
+    if (!id) return null;
+    let item = await new Promise(resolve => {
+      const done = data => { removeEventListener('message', h); clearTimeout(t); resolve(data); };
+      const h = e => e.source === window && e.data?.dx === 'tiktok-item-reply' && e.data.id === id && done(e.data.item);
+      const t = setTimeout(() => done(null), 1500);
+      addEventListener('message', h);
+      postMessage({ dx: 'tiktok-item', id }, '*');
+    });
+    if (!item && location.pathname.includes(`/video/${id}`)) {
+      const json = document.getElementById('__UNIVERSAL_DATA_FOR_REHYDRATION__')?.textContent;
+      item = json && JSON.parse(json).__DEFAULT_SCOPE__?.['webapp.video-detail']?.itemInfo?.itemStruct;
+    }
+    if (!item?.video) return null;
+    const user = typeof item.author === 'string' ? item.author : item.author?.uniqueId;
+    const words = (item.desc || '').replace(/#\S+/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    const base = `${user || 'tiktok'} - ${words || id}`.replace(/[\\/:*?"<>|]/g, '');
+    // One choice per resolution. H.264 first (it plays everywhere; H.265 needs an add-on in
+    // some Windows players), then the highest resolution and bitrate.
+    const h264 = r => (r.CodecType === 'h264' ? 0 : 1);
+    const rates = [...(item.video.bitrateInfo || [])].sort((a, b) =>
+      h264(a) - h264(b) || (b.PlayAddr?.Height || 0) - (a.PlayAddr?.Height || 0) || b.Bitrate - a.Bitrate);
+    const choices = [];
+    for (const r of rates) {
+      const url = r.PlayAddr?.UrlList?.[0], h = r.PlayAddr?.Height;
+      if (!url || choices.some(c => c.height === h)) continue;
+      const codec = r.CodecType === 'h264' ? 'H.264' : 'H.265';
+      choices.push({ label: `${h}p · ${codec}`, height: h, kind: { type: 'direct' }, url, size: +r.PlayAddr.DataSize || 0, name: `${base} (${h}p).mp4` });
+    }
+    if (!choices.length && item.video.playAddr) {
+      choices.push({ label: 'Video', kind: { type: 'direct' }, url: item.video.playAddr, size: 0, name: `${base}.mp4` });
+    }
+    const music = item.music?.playUrl;
+    if (music) choices.push({ label: 'Sound only · MP3', kind: { type: 'direct' }, url: music, size: 0, name: `${base} (sound).mp3` });
+    choices.title = base;
     return choices;
   }
 

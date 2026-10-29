@@ -142,7 +142,7 @@ pub async fn download(
     let out = match target {
         Target::File(p) => p,
         Target::Dir { dir, name } => {
-            let name = name.or(probe.filename.clone()).or_else(|| name_from_url(url)).unwrap_or("download.bin".into());
+            let name = name.or(probe.filename.clone()).or_else(|| name_from_url(url)).unwrap_or_else(|| fallback_name(probe.content_type.as_deref()));
             fs::create_dir_all(&dir).await?;
             unique_path(&dir.join(name))
         }
@@ -356,6 +356,24 @@ async fn single(client: &Client, url: &str, headers: &HeaderMap, part: &Path, pr
     }
     file.flush().await?;
     Ok(())
+}
+
+/// A name when neither the server nor the URL gives one: the extension from the content type.
+fn fallback_name(content_type: Option<&str>) -> String {
+    let ext = match content_type.unwrap_or("").split(';').next().unwrap_or("").trim() {
+        "video/mp4" => "mp4",
+        "video/webm" => "webm",
+        "video/quicktime" => "mov",
+        "audio/mpeg" => "mp3",
+        "audio/mp4" => "m4a",
+        "audio/ogg" => "ogg",
+        "image/jpeg" => "jpg",
+        "image/png" => "png",
+        "application/pdf" => "pdf",
+        "application/zip" => "zip",
+        _ => "bin",
+    };
+    format!("download.{ext}")
 }
 
 pub fn name_from_url(url: &str) -> Option<String> {

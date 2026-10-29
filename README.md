@@ -21,6 +21,7 @@ Open-source, multi-connection download manager for Windows, written in Rust, wit
 
 - **Floating Download button** above every video → quality menu (720p, 360p, audio only, …). Drag it anywhere (remembered per site); its × hides it on this video, on this site, or everywhere (turn it back on in the popup)
 - Finds every video on the tab, including players inside iframes or shadow DOM, HLS (.m3u8) and DASH (.mpd) streams, and sites like YouTube that build the stream in the page. The badge shows the count, the popup lists them
+- **TikTok**: the button on a feed video offers that post's own qualities (H.264 / H.265) and its sound, named after the author and caption
 - Right-click → *Download with DownloaderX* / *Download video from this page*
 - Takes over normal browser downloads (can be turned off in the popup; small files stay in the browser)
 - Sends cookies + referer so downloads that need a login still work

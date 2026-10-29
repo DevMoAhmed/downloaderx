@@ -295,7 +295,12 @@ async fn probe_inner(r: &ProbeReq) -> anyhow::Result<serde_json::Value> {
             anyhow::bail!("this is a web page: open it in Chrome or Edge and use the DownloaderX button on the video");
         }
         if let Some(p) = p.filter(|_| !ct.contains("mpegurl")) {
-            let label = p.filename.clone().unwrap_or("file".into());
+            // No name from the server or the URL (e.g. TikTok's CDN links): say what it is.
+            let label = p.filename.clone().unwrap_or_else(|| {
+                let kind = if ct.starts_with("video/") { "Video" } else if ct.starts_with("audio/") { "Audio" } else { "File" };
+                let ext = ct.split(['/', ';']).nth(1).unwrap_or("").trim().to_ascii_uppercase();
+                if ext.is_empty() || kind == "File" { kind.to_string() } else { format!("{kind} · {ext}") }
+            });
             return Ok(json!({
                 "title": p.filename,
                 "choices": [Choice { label, kind: json!({ "type": "direct" }), url: r.url.clone(), size: p.size, name: None, headers: vec![] }],
